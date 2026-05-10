@@ -98,9 +98,11 @@ function App() {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-[#f0f2f5] gap-6">
         <div className="relative">
-          <div className="w-16 h-16 border-4 border-slate-200 border-t-brand rounded-full animate-spin"></div>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Globe className="w-6 h-6 text-brand animate-pulse" />
+          <div className="w-20 h-20 border-4 border-slate-200 border-t-brand rounded-full animate-spin"></div>
+          <div className="absolute inset-0 flex items-center justify-center p-2">
+            <div className="w-full h-full rounded-full overflow-hidden shadow-lg animate-pulse">
+               <img src="/LOGO.jpg" alt="Loading Logo" className="w-full h-full object-cover" />
+            </div>
           </div>
         </div>
         <div className="flex flex-col items-center gap-2">

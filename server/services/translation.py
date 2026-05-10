@@ -19,7 +19,14 @@ async def translate_with_llm(text, from_lang, to_lang, domain="general"):
         "legal": "legal and contractual communication"
     }.get(domain, "everyday casual conversation")
 
-    text_safe = text.replace('"', '\\"')
+    # Protect URLs from translation
+    url_pattern = r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
+    urls = re.findall(url_pattern, text)
+    placeholder_text = text
+    for i, url in enumerate(urls):
+        placeholder_text = placeholder_text.replace(url, f"[[URL_{i}]]")
+
+    text_safe = placeholder_text.replace('"', '\\"')
     
     # Advanced Prompting with Few-Shot Examples and Context
     prompt = f"""
@@ -31,13 +38,14 @@ GUIDELINES:
 2. IF the text is already in "{to_lang}", return it exactly as is.
 3. IF the text is in a different language, translate it to "{to_lang}".
 4. Preserve tone, intent, and any emojis.
+5. IMPORTANT: Preserve any placeholders like [[URL_0]], [[URL_1]], etc. EXACTLY as they are. Do NOT translate them.
 
 EXAMPLES:
-Input (English -> Hindi): "How are you doing?"
-Output: {{"translation": "आप कैसे हैं?", "confidence": 100}}
+Input (English -> Hindi): "Check this out: [[URL_0]]"
+Output: {{"translation": "इसे देखें: [[URL_0]]", "confidence": 100}}
 
-Input (Hindi -> English): "नमस्ते, क्या हाल है?"
-Output: {{"translation": "Hello, how are you?", "confidence": 100}}
+Input (Hindi -> English): "नमस्ते, [[URL_0]] देखो"
+Output: {{"translation": "Hello, look at [[URL_0]]", "confidence": 100}}
 
 TASK:
 Translate the following text:
@@ -64,7 +72,7 @@ Return ONLY a valid JSON object:
                 json={
                     "model": "openai/gpt-oss-120b:free",
                     "messages": [
-                        {"role": "system", "content": "You are a professional, accurate translator. You only output valid JSON."},
+                        {"role": "system", "content": "You are a professional, accurate translator. You only output valid JSON. Always preserve placeholders like [[URL_X]]."},
                         {"role": "user", "content": prompt}
                     ],
                     "temperature": 0.1 # Low temperature for high accuracy
@@ -86,12 +94,28 @@ Return ONLY a valid JSON object:
             # Robust JSON extraction
             try:
                 json_match = re.search(r'\{.*\}', content, re.DOTALL)
+                parsed = {}
                 if json_match:
-                    return json.loads(json_match.group())
-                return json.loads(content.strip())
+                    parsed = json.loads(json_match.group())
+                else:
+                    parsed = json.loads(content.strip())
+                
+                translated_text = parsed.get("translation", "")
+                
+                # Restore URLs
+                for i, url in enumerate(urls):
+                    translated_text = translated_text.replace(f"[[URL_{i}]]", url)
+                    translated_text = translated_text.replace(f"[[URL_{i}]]".lower(), url) # Handle cases where LLM might lowercase the tag
+                
+                parsed["translation"] = translated_text
+                return parsed
             except Exception as json_err:
                 logger.warning(f"JSON Parsing failed, returning raw content: {json_err}")
-                return {"translation": content.strip(), "confidence": 50}
+                translated_text = content.strip()
+                # Restore URLs
+                for i, url in enumerate(urls):
+                    translated_text = translated_text.replace(f"[[URL_{i}]]", url)
+                return {"translation": translated_text, "confidence": 50}
     except Exception as e:
         logger.error(f"OpenRouter Connection/Request Error: {str(e)}")
         return None

@@ -24,20 +24,20 @@ function ChatRoom({ user, onUserUpdate, socket }) {
     localStorage.setItem('pref_myLang', myLang);
   }, [myLang]);
 
-  // Sync with global user profile changes
+  // Check for pending global language update on mount
   useEffect(() => {
-    if (user.preferredLanguage && user.preferredLanguage !== myLang) {
-      setMyLang(user.preferredLanguage);
-      // When synced from dashboard, update all messages to this language automatically
-      setMessages(prev => prev.map(msg => ({
-        ...msg,
-        targetLang: user.preferredLanguage
-      })));
+    const pending = localStorage.getItem('pending_history_translate');
+    if (pending) {
+      setPendingLang(pending);
+      setIsConfirmingLang(true);
+      localStorage.removeItem('pending_history_translate');
     }
-  }, [user.preferredLanguage]);
+  }, []);
 
-  const handleLanguageChangeRequest = (newLang) => {
+  const handleLanguageChangeRequest = async (newLang) => {
     if (newLang === myLang) return;
+    
+    // Trigger modal for history choice
     setPendingLang(newLang);
     setIsConfirmingLang(true);
     
@@ -45,10 +45,10 @@ function ChatRoom({ user, onUserUpdate, socket }) {
     setMyLang(newLang);
     onUserUpdate({ preferredLanguage: newLang });
     
-    // Update user profile silently
+    // Update user profile in background
     try {
       const token = localStorage.getItem('token');
-      axios.patch(`${import.meta.env.VITE_API_URL}/api/users/profile`, 
+      await axios.patch(`${import.meta.env.VITE_API_URL}/api/users/profile`, 
         { preferredLanguage: newLang },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -58,18 +58,16 @@ function ChatRoom({ user, onUserUpdate, socket }) {
   };
 
   const confirmHistoryTranslation = () => {
-    // Apply the new language to all EXISTING messages
-    setMessages(prev => prev.map(msg => ({
-      ...msg,
-      targetLang: pendingLang
-    })));
+    // Clear the cache for this session so everything re-translates to the new language
+    localStorage.removeItem(`cached_messages_${sessionId}`);
     setIsConfirmingLang(false);
+    window.location.reload();
   };
 
   const cancelHistoryTranslation = () => {
+    // Keep the current cache (which has the old languages)
     setIsConfirmingLang(false);
-    // Future messages will already be in pendingLang (myLang), 
-    // old ones stay as they were.
+    window.location.reload();
   };
 
   const [domain, setDomain] = useState('general');
@@ -194,8 +192,14 @@ function ChatRoom({ user, onUserUpdate, socket }) {
       const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/sessions/${sessionId}/messages`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      // Lock history messages to the CURRENTLY SELECTED language
-      const messagesWithLang = res.data.map(msg => ({ ...msg, targetLang: myLang }));
+      
+      const cached = JSON.parse(localStorage.getItem(`cached_messages_${sessionId}`) || '[]');
+      const messagesWithLang = res.data.map(msg => {
+        const cachedMsg = cached.find(cm => cm._id === msg._id);
+        // Keep the old targetLang if it exists, otherwise use current myLang
+        return { ...msg, targetLang: cachedMsg?.targetLang || myLang };
+      });
+      
       setMessages(messagesWithLang);
       localStorage.setItem(`cached_messages_${sessionId}`, JSON.stringify(messagesWithLang));
     } catch (err) {
@@ -254,8 +258,13 @@ function ChatRoom({ user, onUserUpdate, socket }) {
       recognitionRef.current?.stop();
       setIsRecording(false);
     } else {
+      if (!window.isSecureContext && window.location.hostname !== 'localhost') {
+        alert('Microphone access is restricted on non-secure connections (HTTP). Please use HTTPS or enable "Insecure origins treated as secure" in your browser flags.');
+        console.warn('To enable mic on this IP, go to: chrome://flags/#unsafely-treat-insecure-origin-as-secure and add ' + window.location.origin + ' to the list.');
+        return;
+      }
       if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
-        alert('Speech recognition not supported');
+        alert('Speech recognition not supported in this browser.');
         return;
       }
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -303,13 +312,13 @@ function ChatRoom({ user, onUserUpdate, socket }) {
                   onClick={cancelHistoryTranslation}
                   className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 transition-colors text-sm"
                 >
-                  Keep Original
+                  Don't change
                 </button>
                 <button 
                   onClick={confirmHistoryTranslation}
                   className="flex-1 px-4 py-2.5 rounded-xl bg-brand text-white font-semibold shadow-lg shadow-brand/20 hover:bg-brand/90 transition-colors text-sm"
                 >
-                  Translate All
+                  Translate
                 </button>
               </div>
             </motion.div>
@@ -579,8 +588,45 @@ const MessageBubble = ({ msg, isOwn, targetLang, domain }) => {
             </div>
           ) : (
             <div className="flex flex-col">
-              <p className="text-[14.5px] leading-[1.4] pr-16 break-words whitespace-pre-wrap">{displayText}</p>
-              <div className="flex items-center gap-1 opacity-60 ml-auto mt-[-4px]">
+              <div className="text-[14.5px] leading-[1.4] pr-12 break-words whitespace-pre-wrap">
+                {displayText.split(/(https?:\/\/[^\s]+)/g).map((part, index) => {
+                  if (part.match(/^https?:\/\//)) {
+                    return (
+                      <a 
+                        key={index} 
+                        href={part} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline break-all"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {part}
+                      </a>
+                    );
+                  }
+                  return part;
+                })}
+              </div>
+              
+              {/* Basic Link Preview */}
+              {displayText.match(/https?:\/\/[^\s]+/) && (
+                <div className="mt-2 bg-black/5 rounded-lg overflow-hidden border border-black/5 flex flex-col pointer-events-auto">
+                   {/* We could fetch real metadata here, but for now we show a nice "Link" indicator */}
+                   <div className="p-2 flex items-center gap-3">
+                      <div className="w-10 h-10 bg-white rounded flex items-center justify-center shadow-sm">
+                         <Globe className="w-5 h-5 text-blue-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Shared Link</p>
+                         <p className="text-xs text-slate-600 truncate font-medium">
+                            {displayText.match(/https?:\/\/[^\s]+/)[0]}
+                         </p>
+                      </div>
+                   </div>
+                </div>
+              )}
+
+              <div className="flex items-center gap-1 opacity-60 ml-auto mt-1">
                 <span className="text-[10px] font-medium uppercase text-slate-500">
                   {msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : ''}
                 </span>
