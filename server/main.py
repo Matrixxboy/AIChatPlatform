@@ -20,7 +20,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # FastAPI App
-app = FastAPI(title="Biz Insights Multilingual Translator API")
+app = FastAPI(title="Biz Insights Multilingual Translator API", strict_slashes=False)
 
 # CORS
 app.add_middleware(
@@ -61,12 +61,15 @@ socket_app = socketio.ASGIApp(sio, app)
 
 @sio.on('connect')
 async def connect(sid, environ, auth):
+    logger.info(f"Socket connection attempt: {sid}")
     if not auth or 'token' not in auth:
+        logger.warning(f"Socket connection refused: Missing token in auth (sid: {sid})")
         return False # Refuse connection
     
     token = auth['token']
     payload = decode_token(token)
     if not payload:
+        logger.warning(f"Socket connection refused: Invalid token (sid: {sid})")
         return False
     
     user_id = payload.get("userId")
@@ -115,13 +118,16 @@ async def send_message(sid, data):
         result = await messages_collection.insert_one(new_message)
         new_message["_id"] = str(result.inserted_id)
         
-        # 2. Update session
+        # 2. Update session and CLEAR hiddenFor (so it reappears for everyone)
         await sessions_collection.update_one(
             {"_id": ObjectId(session_id)},
-            {"$set": {
-                "lastMessage": text,
-                "lastMessageTime": datetime.now()
-            }}
+            {
+                "$set": {
+                    "lastMessage": text,
+                    "lastMessageTime": datetime.now(),
+                    "hiddenFor": []
+                }
+            }
         )
         
         # 3. Emit to room
@@ -153,6 +159,29 @@ async def typing(sid, data):
     session_id = data.get("sessionId")
     user_id = data.get("userId")
     await sio.emit('user_typing', {"userId": user_id, "isTyping": True}, room=session_id, skip_sid=sid)
+
+@sio.on('mark_seen')
+async def mark_seen(sid, data):
+    session_id = data.get("sessionId")
+    message_id = data.get("messageId")
+    user_id = data.get("userId") # The one who SEEN it
+    
+    logger.info(f"Message {message_id} marked as seen by {user_id}")
+    
+    try:
+        # Update DB
+        await messages_collection.update_one(
+            {"_id": ObjectId(message_id)},
+            {"$set": {"status": "seen", "seenAt": datetime.now()}}
+        )
+        # Broadcast to room
+        await sio.emit('message_status_update', {
+            "messageId": message_id,
+            "status": "seen",
+            "sessionId": session_id
+        }, room=session_id)
+    except Exception as e:
+        logger.error(f"Error marking message as seen: {e}")
 
 @sio.on('stop_typing')
 async def stop_typing(sid, data):

@@ -33,7 +33,9 @@ async def register(user_data: UserCreate):
             "id": user_id,
             "username": user_data.username.lower(),
             "name": user_data.name,
-            "preferredLanguage": user_dict.get("preferredLanguage", "English")
+            "preferredLanguage": user_dict.get("preferredLanguage", "English"),
+            "bio": user_dict.get("bio", ""),
+            "profileImage": user_dict.get("profileImage", "")
         }
     }
 
@@ -58,6 +60,8 @@ async def login(user_data: dict):
             "id": user_id,
             "username": user["username"],
             "name": user["name"],
-            "preferredLanguage": user.get("preferredLanguage", "English")
+            "preferredLanguage": user.get("preferredLanguage", "English"),
+            "bio": user.get("bio", ""),
+            "profileImage": user.get("profileImage", "")
         }
     }

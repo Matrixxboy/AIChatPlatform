@@ -29,14 +29,16 @@ async def search_users(q: str = Query(...), current_user_id: str = Depends(get_c
         users.append({
             "_id": str(user["_id"]),
             "username": user["username"],
-            "name": user["name"]
+            "name": user["name"],
+            "bio": user.get("bio", ""),
+            "profileImage": user.get("profileImage", "")
         })
     
     return users
 
 @router.patch("/profile")
 async def update_profile(data: dict, current_user_id: str = Depends(get_current_user_id)):
-    allowed_fields = ["name", "preferredLanguage"]
+    allowed_fields = ["name", "preferredLanguage", "bio", "profileImage"]
     update_data = {k: v for k, v in data.items() if k in allowed_fields}
     
     if not update_data:
@@ -47,3 +49,18 @@ async def update_profile(data: dict, current_user_id: str = Depends(get_current_
         {"$set": update_data}
     )
     return {"message": "Profile updated successfully"}
+
+@router.get("/{user_id}")
+async def get_user_profile(user_id: str, current_user_id: str = Depends(get_current_user_id)):
+    user = await users_collection.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    return {
+        "_id": str(user["_id"]),
+        "username": user["username"],
+        "name": user["name"],
+        "bio": user.get("bio", ""),
+        "profileImage": user.get("profileImage", ""),
+        "preferredLanguage": user.get("preferredLanguage", "English")
+    }

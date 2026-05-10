@@ -5,7 +5,7 @@ import { Search, Plus, MessageSquare, LogOut, UserPlus, Bell, Settings, MoreHori
 import { motion, AnimatePresence } from 'framer-motion';
 import io from 'socket.io-client';
 
-function Dashboard({ user, onLogout, socket }) {
+function Dashboard({ user, onLogout, onUserUpdate, socket }) {
   const [sessions, setSessions] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -20,6 +20,7 @@ function Dashboard({ user, onLogout, socket }) {
 
   const handleLanguageChange = async (newLang) => {
     setMyLang(newLang);
+    onUserUpdate({ preferredLanguage: newLang });
     try {
       const token = localStorage.getItem('token');
       await axios.patch(`${import.meta.env.VITE_API_URL}/api/users/profile`, 
@@ -35,7 +36,7 @@ function Dashboard({ user, onLogout, socket }) {
     fetchSessions();
     if (!socket) return;
 
-    socket.emit('join_user_room', { userId: user.userId });
+    socket.emit('join_user_room', { userId: user.id });
 
     const handleSessionUpdate = (data) => {
       setSessions(prev => {
@@ -64,7 +65,7 @@ function Dashboard({ user, onLogout, socket }) {
     return () => {
       socket.off('session_update', handleSessionUpdate);
     };
-  }, [socket, user.userId]);
+  }, [socket, user.id]);
 
   const fetchSessions = async () => {
     try {
@@ -111,6 +112,67 @@ function Dashboard({ user, onLogout, socket }) {
     }
   };
 
+  const [isDeleting, setIsDeleting] = useState(null); // sessionId
+  const handleDeleteSession = async (sessionId) => {
+    try {
+      const token = localStorage.getItem('token');
+      await axios.delete(`${import.meta.env.VITE_API_URL}/api/sessions/${sessionId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setSessions(prev => prev.filter(s => s._id !== sessionId));
+      setIsDeleting(null);
+    } catch (err) {
+      console.error('Failed to delete session');
+    }
+  };
+
+  const [editingName, setEditingName] = useState(user.name);
+  const [editingBio, setEditingBio] = useState(user.bio || '');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+  useEffect(() => {
+    setEditingName(user.name);
+    setEditingBio(user.bio || '');
+  }, [user.name, user.bio]);
+
+  const saveProfile = async () => {
+    setIsSavingProfile(true);
+    try {
+      const token = localStorage.getItem('token');
+      await axios.patch(`${import.meta.env.VITE_API_URL}/api/users/profile`, 
+        { name: editingName, bio: editingBio },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      onUserUpdate({ name: editingName, bio: editingBio });
+    } catch (err) {
+      console.error('Failed to save profile');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64String = reader.result;
+      try {
+        const token = localStorage.getItem('token');
+        await axios.patch(`${import.meta.env.VITE_API_URL}/api/users/profile`, 
+          { profileImage: base64String },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        onUserUpdate({ profileImage: base64String });
+        setSessions([...sessions]); // Trigger re-render
+      } catch (err) {
+        console.error('Failed to upload image');
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   return (
     <div className="flex h-screen bg-[#f0f2f5] overflow-hidden font-sans relative">
       {/* Profile Sidebar (Slides in) */}
@@ -135,30 +197,62 @@ function Dashboard({ user, onLogout, socket }) {
 
             <div className="flex-1 overflow-y-auto">
               <div className="py-8 flex flex-col items-center">
-                <div className="w-52 h-52 bg-white rounded-full flex items-center justify-center shadow-lg border-4 border-white relative group overflow-hidden">
-                   <div className="w-full h-full bg-brand/5 text-brand flex items-center justify-center font-bold text-6xl">
-                      {user.name[0].toUpperCase()}
-                   </div>
-                   <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                 <div className="w-52 h-52 bg-white rounded-full flex items-center justify-center shadow-lg border-4 border-white relative group overflow-hidden">
+                   {user.profileImage ? (
+                      <img src={user.profileImage} alt="Profile" className="w-full h-full object-cover" />
+                   ) : (
+                      <div className="w-full h-full bg-brand/5 text-brand flex items-center justify-center font-bold text-6xl">
+                        {user.name[0].toUpperCase()}
+                      </div>
+                   )}
+                   <label className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
                       <p className="text-white text-[10px] font-bold uppercase tracking-widest">Change Photo</p>
-                   </div>
+                      <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                   </label>
                 </div>
               </div>
 
               <div className="bg-white px-8 py-6 shadow-sm mb-4">
-                 <p className="text-brand text-xs font-bold uppercase tracking-widest mb-4">Your Name</p>
-                 <div className="flex justify-between items-center group">
-                    <p className="text-slate-800 text-lg font-medium">{user.name}</p>
-                    <Settings className="w-4 h-4 text-slate-300 opacity-0 group-hover:opacity-100 transition-all cursor-pointer" />
-                 </div>
-                 <p className="text-[13px] text-slate-400 mt-4 leading-relaxed font-medium">
-                    This is not your username or pin. This name will be visible to your contacts.
+                 <p className="text-brand text-xs font-bold uppercase tracking-widest mb-2">Your Name</p>
+                 <input 
+                    type="text"
+                    value={editingName}
+                    onChange={(e) => setEditingName(e.target.value)}
+                    className="w-full text-slate-800 text-lg font-medium border-b border-transparent focus:border-brand outline-none pb-1 transition-all"
+                 />
+                 <p className="text-[11px] text-slate-400 mt-3 leading-relaxed font-medium">
+                    Visible to your contacts and in search.
                  </p>
               </div>
 
               <div className="bg-white px-8 py-6 shadow-sm mb-4">
-                 <p className="text-brand text-xs font-bold uppercase tracking-widest mb-4">Username</p>
+                 <p className="text-brand text-xs font-bold uppercase tracking-widest mb-2">About / Bio</p>
+                 <textarea 
+                    value={editingBio}
+                    onChange={(e) => setEditingBio(e.target.value)}
+                    placeholder="Add a bio..."
+                    className="w-full text-slate-700 text-[15px] font-medium border-b border-transparent focus:border-brand outline-none pb-1 transition-all resize-none h-16"
+                 />
+              </div>
+
+              <div className="px-8 py-6">
+                 <button 
+                    onClick={saveProfile}
+                    disabled={isSavingProfile || (editingName === user.name && editingBio === (user.bio || ''))}
+                    className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all shadow-lg ${
+                      isSavingProfile || (editingName === user.name && editingBio === (user.bio || ''))
+                        ? 'bg-slate-100 text-slate-400 shadow-none'
+                        : 'bg-brand text-white shadow-brand/20 hover:bg-brand/90'
+                    }`}
+                 >
+                    {isSavingProfile ? 'Saving Changes...' : 'Save Profile'}
+                 </button>
+              </div>
+
+              <div className="bg-white px-8 py-6 shadow-sm mb-4">
+                 <p className="text-brand text-xs font-bold uppercase tracking-widest mb-1">My Username</p>
                  <p className="text-slate-800 text-lg font-medium tracking-tight">@{user.username}</p>
+                 <p className="text-[11px] text-slate-400 mt-2 font-medium">Use this to help others find you instantly.</p>
               </div>
 
               <div className="bg-white px-8 py-6 shadow-sm">
@@ -179,9 +273,15 @@ function Dashboard({ user, onLogout, socket }) {
         <div className="h-[60px] bg-[#f0f2f5] px-4 flex items-center justify-between">
           <div 
             onClick={() => setIsProfileOpen(true)}
-            className="w-10 h-10 bg-slate-300 rounded-full flex items-center justify-center font-bold text-slate-600 shadow-sm overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
+            className="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center font-bold text-slate-500 shadow-sm overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
           >
-             {user.name[0].toUpperCase()}
+             {user.profileImage ? (
+                <img src={user.profileImage} alt="Profile" className="w-full h-full object-cover" />
+             ) : (
+                <div className="w-full h-full bg-brand/10 text-brand flex items-center justify-center font-bold text-lg">
+                  {user.name[0].toUpperCase()}
+                </div>
+             )}
           </div>
           <div className="flex items-center gap-2 text-slate-500">
             <button className="p-2 hover:bg-slate-200 rounded-full transition-all"><Globe className="w-5 h-5" /></button>
@@ -237,12 +337,16 @@ function Dashboard({ user, onLogout, socket }) {
                     onClick={() => createSession(u)}
                     className="flex items-center gap-4 p-3 hover:bg-[#f5f6f6] cursor-pointer transition-all border-b border-slate-50 last:border-0"
                   >
-                    <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center font-bold text-slate-400">
-                       {u.name[0].toUpperCase()}
+                    <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center font-bold text-slate-400 overflow-hidden shrink-0">
+                       {u.profileImage ? (
+                          <img src={u.profileImage} alt={u.name} className="w-full h-full object-cover" />
+                       ) : (
+                          u.name[0].toUpperCase()
+                       )}
                     </div>
                     <div>
                        <p className="font-bold text-[15px] text-slate-900 leading-tight">{u.name}</p>
-                       <p className="text-xs text-slate-400 font-medium italic">Click to start conversation</p>
+                       <p className="text-[11px] text-slate-400 font-medium tracking-tight mt-0.5">@{u.username}</p>
                     </div>
                   </div>
                ))}
@@ -255,27 +359,65 @@ function Dashboard({ user, onLogout, socket }) {
                   onClick={() => navigate(`/chat/${s._id}`)}
                   className="flex items-center gap-4 p-3 px-4 hover:bg-[#f5f6f6] cursor-pointer transition-all border-b border-slate-50 last:border-0 group"
                 >
-                  <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center font-bold text-slate-400 relative overflow-hidden">
-                     <div className="w-full h-full bg-brand/5 text-brand flex items-center justify-center">
-                        {s.name[0].toUpperCase()}
-                     </div>
+                  <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center font-bold text-slate-400 relative overflow-hidden shrink-0">
+                     {s.otherUser?.profileImage ? (
+                        <img src={s.otherUser.profileImage} className="w-full h-full object-cover" />
+                     ) : (
+                        <div className="w-full h-full bg-brand/5 text-brand flex items-center justify-center">
+                           {s.name[0].toUpperCase()}
+                        </div>
+                     )}
                   </div>
-                  <div className="flex-1 min-w-0 border-b border-slate-100 py-2 group-last:border-0">
+                  <div className="flex-1 min-w-0 border-b border-slate-100 py-2 group-last:border-0 relative">
                     <div className="flex justify-between items-start mb-0.5">
-                      <p className="font-bold text-[15px] text-slate-900 truncate">{s.name}</p>
-                      <span className="text-[11px] text-slate-400 font-medium">
+                      <div className="flex flex-col min-w-0">
+                        <p className="font-bold text-[15px] text-slate-900 truncate">{s.name}</p>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">@{s.otherUser?.username || 'user'}</p>
+                      </div>
+                      <span className="text-[11px] text-slate-400 font-medium shrink-0 pt-1">
                         {new Date(s.lastMessageTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
                       </span>
                     </div>
-                    <p className="text-sm text-slate-500 truncate leading-tight pr-4">
-                      {s.lastMessage || 'Click to open chat...'}
-                    </p>
+                    <div className="flex justify-between items-center gap-2">
+                       <p className="text-sm text-slate-500 truncate leading-tight pr-4">
+                          {s.lastMessage || 'Click to open chat...'}
+                       </p>
+                       <button 
+                          onClick={(e) => {
+                             e.stopPropagation();
+                             setIsDeleting(s._id);
+                          }}
+                          className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-all"
+                       >
+                          <LogOut className="w-3.5 h-3.5" />
+                       </button>
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
           )}
         </div>
+
+        {/* Delete Confirmation Modal */}
+        <AnimatePresence>
+          {isDeleting && (
+             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+                <motion.div 
+                   initial={{ scale: 0.9, opacity: 0 }}
+                   animate={{ scale: 1, opacity: 1 }}
+                   className="bg-white rounded-2xl p-6 shadow-2xl max-w-sm w-full"
+                >
+                   <h3 className="text-lg font-bold text-slate-900 mb-2">Delete Chat?</h3>
+                   <p className="text-slate-500 text-sm mb-6">Are you sure you want to delete this chat? This will only remove it for you.</p>
+                   <div className="flex gap-3">
+                      <button onClick={() => setIsDeleting(null)} className="flex-1 px-4 py-2 rounded-xl border border-slate-200 font-bold text-slate-600">Cancel</button>
+                      <button onClick={() => handleDeleteSession(isDeleting)} className="flex-1 px-4 py-2 rounded-xl bg-red-500 text-white font-bold">Delete</button>
+                   </div>
+                </motion.div>
+             </div>
+          )}
+        </AnimatePresence>
       </aside>
 
       {/* Main Empty State (WhatsApp Web Style) - Hidden on Mobile */}

@@ -2,10 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import io from 'socket.io-client';
 import axios from 'axios';
-import { Send, Mic, ArrowLeft, MoreHorizontal, Globe, ShieldCheck, ChevronDown, CheckCircle2, AlertCircle, Sparkles, Hash, Volume2, Settings, Search, LogOut } from 'lucide-react';
+import { Search, Plus, MessageSquare, Mic, Send, ArrowLeft, Globe, Sparkles, LogOut, X, Phone, Video, MoreVertical, MoreHorizontal, Globe2, Check, CheckCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-function ChatRoom({ user, socket }) {
+function ChatRoom({ user, onUserUpdate, socket }) {
   const { sessionId } = useParams();
   const navigate = useNavigate();
   const [messages, setMessages] = useState([]);
@@ -20,6 +20,18 @@ function ChatRoom({ user, socket }) {
     localStorage.setItem('pref_myLang', myLang);
   }, [myLang]);
 
+  // Sync with global user profile changes
+  useEffect(() => {
+    if (user.preferredLanguage && user.preferredLanguage !== myLang) {
+      setMyLang(user.preferredLanguage);
+      // When synced from dashboard, update all messages to this language automatically
+      setMessages(prev => prev.map(msg => ({
+        ...msg,
+        targetLang: user.preferredLanguage
+      })));
+    }
+  }, [user.preferredLanguage]);
+
   const handleLanguageChangeRequest = (newLang) => {
     if (newLang === myLang) return;
     setPendingLang(newLang);
@@ -27,6 +39,7 @@ function ChatRoom({ user, socket }) {
     
     // Always update global language for FUTURE messages immediately
     setMyLang(newLang);
+    onUserUpdate({ preferredLanguage: newLang });
     
     // Update user profile silently
     try {
@@ -93,17 +106,43 @@ function ChatRoom({ user, socket }) {
 
     const handleReceiveMessage = (message) => {
       setIsTranslating(false);
-      // Lock the incoming message to the CURRENT language
+      
+      // Ensure we have a text field for UI consistency
+      if (!message.text && message.originalText) {
+        message.text = message.originalText;
+      }
+      
       const messageWithLang = { ...message, targetLang: myLang };
       
       setMessages(prev => {
         if (messageWithLang.senderId === user.id) {
-          const exists = prev.find(m => m.isOptimistic && m.text === messageWithLang.text);
-          if (exists) return prev.map(m => (m._id === exists._id ? messageWithLang : m));
+          // Match by originalText to replace optimistic message
+          const exists = prev.find(m => m.isOptimistic && m.originalText === messageWithLang.originalText);
+          if (exists) {
+             console.log("Replacing optimistic message", exists._id, "with", messageWithLang._id);
+             return prev.map(m => (m._id === exists._id ? messageWithLang : m));
+          }
         }
+        
         if (prev.find(m => m._id === messageWithLang._id)) return prev;
+        
+        // Mark as seen if it's from others
+        if (messageWithLang.senderId !== user.id) {
+          socket.emit('mark_seen', { 
+            messageId: messageWithLang._id, 
+            sessionId, 
+            userId: user.id 
+          });
+        }
+        
         return [...prev, messageWithLang];
       });
+    };
+
+    const handleStatusUpdate = (data) => {
+      setMessages(prev => prev.map(m => 
+        m._id === data.messageId ? { ...m, status: data.status } : m
+      ));
     };
 
     const handleUserTyping = (data) => {
@@ -116,12 +155,14 @@ function ChatRoom({ user, socket }) {
     socket.on('disconnect', onDisconnect);
     socket.on('receive_message', handleReceiveMessage);
     socket.on('user_typing', handleUserTyping);
+    socket.on('message_status_update', handleStatusUpdate);
 
     return () => {
       socket.off('connect', onConnect);
       socket.off('disconnect', onDisconnect);
       socket.off('receive_message', handleReceiveMessage);
       socket.off('user_typing', handleUserTyping);
+      socket.off('message_status_update', handleStatusUpdate);
     };
   }, [socket, sessionId, user.id]);
 
@@ -294,7 +335,9 @@ function ChatRoom({ user, socket }) {
             <div className="flex-1 overflow-y-auto">
               <div className="bg-white py-8 flex flex-col items-center shadow-sm mb-4">
                 <div className="w-52 h-52 bg-slate-100 rounded-full flex items-center justify-center shadow-md mb-6 overflow-hidden">
-                   {session?.name ? (
+                   {session?.otherUser?.profileImage ? (
+                      <img src={session.otherUser.profileImage} alt="Profile" className="w-full h-full object-cover" />
+                   ) : session?.name ? (
                      <div className="w-full h-full bg-brand/10 text-brand flex items-center justify-center font-bold text-6xl">
                        {session.name[0].toUpperCase()}
                      </div>
@@ -303,13 +346,13 @@ function ChatRoom({ user, socket }) {
                    )}
                 </div>
                 <h2 className="text-2xl font-medium text-slate-900">{session?.name}</h2>
-                <p className="text-slate-500 text-sm mt-1 tracking-tight">Active via Neural Link</p>
+                <p className="text-slate-500 text-sm mt-1 tracking-tight">@{session?.otherUser?.username || 'user'}</p>
               </div>
 
               <div className="bg-white px-8 py-6 shadow-sm mb-4">
                  <p className="text-slate-400 text-sm font-medium mb-1">About</p>
                  <p className="text-slate-800 text-[15px] leading-relaxed">
-                   High-performance participant in the {domain} network.
+                   {session?.otherUser?.bio || `Professional participant in the ${domain} network.`}
                  </p>
               </div>
 
@@ -337,7 +380,9 @@ function ChatRoom({ user, socket }) {
             className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
           >
             <div className="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center shadow-sm overflow-hidden">
-               {session?.name ? (
+               {session?.otherUser?.profileImage ? (
+                  <img src={session.otherUser.profileImage} alt="Profile" className="w-full h-full object-cover" />
+               ) : session?.name ? (
                  <div className="w-full h-full bg-brand/10 text-brand flex items-center justify-center font-bold text-base">
                    {session.name[0].toUpperCase()}
                  </div>
@@ -459,18 +504,21 @@ const MessageBubble = ({ msg, isOwn, targetLang, domain }) => {
   const [isTranslating, setIsTranslating] = useState(false);
 
   useEffect(() => {
-    if (msg.fromLang === targetLang) {
-      setDisplayText(msg.originalText || msg.text);
-      return;
-    }
-
+    // If the message is already in the target language (judged by LLM previously or fromLang)
+    // we still check if we have a translation cached.
+    
     if (msg.translations && msg.translations[targetLang]) {
       setDisplayText(msg.translations[targetLang]);
       return;
     }
 
     const fetchTranslation = async () => {
-      if (!msg._id || isTranslating) return;
+      if (!msg._id || msg._id.toString().startsWith('temp-') || isTranslating) return;
+      
+      // We removed the strict fromLang === targetLang check here 
+      // to allow the AI to detect if the content actually needs translation 
+      // (e.g. if the user typed Hindi while their setting was English).
+      
       setIsTranslating(true);
       try {
         const token = localStorage.getItem('token');
@@ -480,10 +528,16 @@ const MessageBubble = ({ msg, isOwn, targetLang, domain }) => {
         }, {
           headers: { Authorization: `Bearer ${token}` }
         });
-        setDisplayText(res.data.translation);
+        
+        const translatedText = res.data.translation;
+        setDisplayText(translatedText);
+        
+        // Cache the translation in the message object (locally)
+        // We avoid direct mutation of the prop object by checking if we need to update
         if (!msg.translations) msg.translations = {};
-        msg.translations[targetLang] = res.data.translation;
+        msg.translations[targetLang] = translatedText;
       } catch (err) {
+        console.error("Translation error:", err);
         setDisplayText(msg.originalText || msg.text);
       } finally {
         setIsTranslating(false);
@@ -491,7 +545,7 @@ const MessageBubble = ({ msg, isOwn, targetLang, domain }) => {
     };
 
     fetchTranslation();
-  }, [targetLang, msg._id, domain]);
+  }, [targetLang, msg._id, domain, msg.fromLang]);
 
   return (
     <motion.div 
@@ -513,14 +567,20 @@ const MessageBubble = ({ msg, isOwn, targetLang, domain }) => {
           ) : (
             <div className="flex flex-col">
               <p className="text-[14.5px] leading-[1.4] pr-16 break-words whitespace-pre-wrap">{displayText}</p>
-              <div className="flex items-center gap-1 opacity-40 ml-auto mt-[-4px]">
-                <span className="text-[10px] font-medium uppercase">
+              <div className="flex items-center gap-1 opacity-60 ml-auto mt-[-4px]">
+                <span className="text-[10px] font-medium uppercase text-slate-500">
                   {msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : ''}
                 </span>
                 {isOwn && (
-                   <svg className="w-4 h-4 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                     <path d="m3 12 4 4 10-10"/><path d="m2 12 5 5 11-11"/>
-                   </svg>
+                   <div className="flex items-center">
+                      {msg.status === 'seen' ? (
+                         <div className="flex -space-x-2">
+                           <CheckCheck className="w-4 h-4 text-blue-500" strokeWidth={3} />
+                         </div>
+                      ) : (
+                         <Check className="w-4 h-4 text-slate-400" strokeWidth={3} />
+                      )}
+                   </div>
                 )}
               </div>
             </div>
