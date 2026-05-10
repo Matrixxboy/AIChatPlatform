@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+motor
+pymongo
+python-socketio
+python-jose[cryptography]
+passlib[bcrypt]
+bcrypt==3.2.2
+python-dotenv
+httpx
+pydantic
+pydantic-settings
+email-validator
+websockets
