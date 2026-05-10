@@ -8,7 +8,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 function ChatRoom({ user, onUserUpdate, socket }) {
   const { sessionId } = useParams();
   const navigate = useNavigate();
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState(() => {
+    const cached = localStorage.getItem(`cached_messages_${sessionId}`);
+    return cached ? JSON.parse(cached) : [];
+  });
+  const [isFetchingMessages, setIsFetchingMessages] = useState(false);
   const [inputText, setInputText] = useState('');
   const [session, setSession] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
@@ -184,6 +188,7 @@ function ChatRoom({ user, onUserUpdate, socket }) {
   };
 
   const fetchMessages = async () => {
+    setIsFetchingMessages(true);
     try {
       const token = localStorage.getItem('token');
       const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/sessions/${sessionId}/messages`, {
@@ -192,8 +197,11 @@ function ChatRoom({ user, onUserUpdate, socket }) {
       // Lock history messages to the CURRENTLY SELECTED language
       const messagesWithLang = res.data.map(msg => ({ ...msg, targetLang: myLang }));
       setMessages(messagesWithLang);
+      localStorage.setItem(`cached_messages_${sessionId}`, JSON.stringify(messagesWithLang));
     } catch (err) {
       console.error('Failed to fetch messages');
+    } finally {
+      setIsFetchingMessages(false);
     }
   };
 
@@ -398,6 +406,11 @@ function ChatRoom({ user, onUserUpdate, socket }) {
                 <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-slate-300'}`}></div>
                 {isTyping ? (
                   <p className="text-[11px] text-brand font-bold animate-pulse">typing...</p>
+                ) : isFetchingMessages ? (
+                  <div className="flex items-center gap-1">
+                    <div className="w-1 h-1 bg-brand rounded-full animate-bounce"></div>
+                    <p className="text-[11px] text-brand font-bold">syncing messages...</p>
+                  </div>
                 ) : (
                   <p className="text-[11px] text-slate-500 font-medium">
                     {isConnected ? 'online' : 'reconnecting...'}

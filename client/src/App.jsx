@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ChatRoom from './pages/ChatRoom';
 import io from 'socket.io-client';
+import {Globe} from "lucide-react";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -93,7 +94,22 @@ function App() {
     localStorage.setItem('user', JSON.stringify(updatedUser));
   };
 
-  if (loading) return <div className="flex items-center justify-center h-screen">Loading...</div>;
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-[#f0f2f5] gap-6">
+        <div className="relative">
+          <div className="w-16 h-16 border-4 border-slate-200 border-t-brand rounded-full animate-spin"></div>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Globe className="w-6 h-6 text-brand animate-pulse" />
+          </div>
+        </div>
+        <div className="flex flex-col items-center gap-2">
+          <h2 className="text-xl font-bold text-slate-800 tracking-tight">Neural Link</h2>
+          <p className="text-sm text-slate-400 font-medium animate-pulse uppercase tracking-[0.2em]">Synchronizing...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <Router>
