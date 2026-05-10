@@ -5,7 +5,7 @@ import Dashboard from './pages/Dashboard';
 import ChatRoom from './pages/ChatRoom';
 import io from 'socket.io-client';
 
-const API_URL = 'http://localhost:5000';
+const API_URL = import.meta.env.VITE_API_URL;
 
 function App() {
   const [user, setUser] = useState(null);

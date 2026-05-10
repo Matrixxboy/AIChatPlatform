@@ -7,35 +7,50 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 async def translate_with_llm(text, from_lang, to_lang, domain="general"):
+    # If the source and target languages are the same, don't waste tokens
+    if from_lang.lower() == to_lang.lower():
+        return {"translation": text, "confidence": 100}
+
     domain_ctx = {
-        "general": "everyday conversation",
+        "general": "everyday casual conversation",
         "business": "professional business communication",
         "medical": "medical and clinical communication",
         "technical": "technical and engineering communication",
         "legal": "legal and contractual communication"
-    }.get(domain, "everyday conversation")
+    }.get(domain, "everyday casual conversation")
 
     text_safe = text.replace('"', '\\"')
-    prompt = f"""You are a professional translator specialized in {domain_ctx}.
-    Rules:
-    * Do not add explanations, enhancements, summaries, or extra content
-    * Do not omit any information from the original text
-    * Preserve the original emotion, style, and sentence intent
-    * Use accurate terminology for technical/medical/legal domains
-    * Keep the translation as faithful and natural as possible in {to_lang}
-    * Return ONLY valid JSON
-    * Do not include markdown or additional formatting
     
-    Translate the following text from {from_lang} to {to_lang}.
-    Return ONLY a valid JSON object with the following fields:
-    {{
-      "translation": "the translated text",
-      "confidence": 95,
-      "notes": "brief note on any unavoidable translation nuance (optional, max 1 sentence)"
-    }}
+    # Advanced Prompting with Few-Shot Examples and Context
+    prompt = f"""
+You are a high-fidelity neural translation engine for a real-time messaging app.
+Your goal is to translate text from "{from_lang}" to "{to_lang}" with 100% semantic accuracy.
 
-    Text: "{text_safe}"
-    """
+CONTEXT:
+- The text is a real-time message between two users.
+- Domain: {domain_ctx}.
+- Preserve the exact meaning, tone (casual/formal), and intent.
+- Do NOT add explanations, do NOT paraphrase, and do NOT change the meaning.
+- If the text contains slang or idioms, find the closest natural equivalent in "{to_lang}".
+
+EXAMPLES:
+Input (English -> Hindi): "How are you doing?"
+Output: {{"translation": "आप कैसे हैं?", "confidence": 100}}
+
+Input (Hindi -> English): "नमस्ते, क्या हाल है?"
+Output: {{"translation": "Hello, how are you?", "confidence": 100}}
+
+TASK:
+Translate the following text:
+"{text_safe}"
+
+RESPONSE FORMAT:
+Return ONLY a valid JSON object:
+{{
+    "translation": "translated text here",
+    "confidence": 95
+}}
+"""
 
     try:
         async with httpx.AsyncClient(timeout=20.0) as client:
@@ -48,8 +63,12 @@ async def translate_with_llm(text, from_lang, to_lang, domain="general"):
                     "X-Title": "Biz Insights Translator"
                 },
                 json={
-                    "model": "mistralai/mistral-7b-instruct-v0.1",
-                    "messages": [{"role": "user", "content": prompt}]
+                    "model": "openai/gpt-oss-120b:free",
+                    "messages": [
+                        {"role": "system", "content": "You are a professional, accurate translator. You only output valid JSON."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": 0.1 # Low temperature for high accuracy
                 }
             )
             
@@ -84,8 +103,6 @@ async def translate(text, from_lang, to_lang, domain):
         result = await translate_with_llm(text, from_lang, to_lang, domain)
         
         if not result:
-            # If OpenRouter fails, we don't fall back to Google anymore.
-            # Return original text with an error indicator.
             return {
                 "translation": text, 
                 "confidence": 0, 

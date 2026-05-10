@@ -31,7 +31,7 @@ function ChatRoom({ user, socket }) {
     // Update user profile silently
     try {
       const token = localStorage.getItem('token');
-      axios.patch('http://localhost:5000/api/users/profile', 
+      axios.patch(`${import.meta.env.VITE_API_URL}/api/users/profile`, 
         { preferredLanguage: newLang },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -132,7 +132,7 @@ function ChatRoom({ user, socket }) {
   const fetchSessionDetails = async () => {
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.get('http://localhost:5000/api/sessions', {
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/sessions`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const current = res.data.find(s => s._id === sessionId);
@@ -145,7 +145,7 @@ function ChatRoom({ user, socket }) {
   const fetchMessages = async () => {
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.get(`http://localhost:5000/api/sessions/${sessionId}/messages`, {
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/sessions/${sessionId}/messages`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       // Lock history messages to the CURRENTLY SELECTED language
@@ -278,14 +278,15 @@ function ChatRoom({ user, socket }) {
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
-            className="absolute inset-y-0 right-0 w-[420px] bg-[#f0f2f5] z-50 shadow-2xl flex flex-col border-l border-slate-200"
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="fixed md:absolute inset-y-0 right-0 w-full md:w-[400px] bg-white z-[60] shadow-2xl flex flex-col border-l border-slate-200"
           >
-            <div className="h-[70px] bg-[#f0f2f5] border-b border-slate-200 flex items-center px-6 gap-6">
+            <div className="h-[110px] bg-[#f0f2f5] flex items-end p-6 pb-4 gap-6">
               <button 
                 onClick={() => setIsOtherProfileOpen(false)}
-                className="text-slate-500 p-2 hover:bg-slate-200 rounded-full transition-all"
+                className="text-slate-500 p-1 hover:bg-slate-200 rounded-full transition-all"
               >
-                <ArrowLeft className="w-6 h-6 rotate-180" />
+                <ArrowLeft className="w-6 h-6" />
               </button>
               <h2 className="text-slate-800 font-bold text-lg">Contact info</h2>
             </div>
@@ -362,9 +363,9 @@ function ChatRoom({ user, socket }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 bg-white/80 backdrop-blur-sm p-1.5 px-3 rounded-xl border border-slate-200 shadow-sm">
-             <Globe className="w-3.5 h-3.5 text-brand" />
+        <div className="flex items-center gap-2 md:gap-4">
+          <div className="flex items-center gap-1 md:gap-2 bg-white/80 backdrop-blur-sm p-1.5 px-2 md:px-3 rounded-xl border border-slate-200 shadow-sm">
+             <Globe className="hidden xs:block w-3 h-3 md:w-3.5 md:h-3.5 text-brand" />
              <select 
                 value={myLang} 
                 onChange={(e) => handleLanguageChangeRequest(e.target.value)}
@@ -382,7 +383,7 @@ function ChatRoom({ user, socket }) {
       </header>
 
       {/* Message Feed */}
-      <div className="flex-1 overflow-y-auto p-4 md:px-10 lg:px-32 space-y-2 custom-scrollbar relative z-10">
+      <div className="flex-1 overflow-y-auto p-4 md:px-10 lg:px-32 space-y-2 custom-scrollbar relative z-10 no-scrollbar">
         <AnimatePresence>
         {messages.map((msg, i) => (
           <MessageBubble 
@@ -473,7 +474,7 @@ const MessageBubble = ({ msg, isOwn, targetLang, domain }) => {
       setIsTranslating(true);
       try {
         const token = localStorage.getItem('token');
-        const res = await axios.post(`http://localhost:5000/api/sessions/messages/${msg._id}/translate`, {
+        const res = await axios.post(`${import.meta.env.VITE_API_URL}/api/sessions/messages/${msg._id}/translate`, {
           toLang: targetLang,
           domain: domain
         }, {

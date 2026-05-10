@@ -19,7 +19,7 @@ function Login({ onLogin }) {
     setIsLoading(true);
     const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
     try {
-      const res = await axios.post(`http://localhost:5000${endpoint}`, formData);
+      const res = await axios.post(`${import.meta.env.VITE_API_URL}${endpoint}`, formData);
       onLogin(res.data.user, res.data.token);
     } catch (err) {
       setError(err.response?.data?.message || 'Authentication failed. Please check your credentials.');

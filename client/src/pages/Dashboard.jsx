@@ -22,7 +22,7 @@ function Dashboard({ user, onLogout, socket }) {
     setMyLang(newLang);
     try {
       const token = localStorage.getItem('token');
-      await axios.patch('http://localhost:5000/api/users/profile', 
+      await axios.patch(`${import.meta.env.VITE_API_URL}/api/users/profile`, 
         { preferredLanguage: newLang },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -69,7 +69,7 @@ function Dashboard({ user, onLogout, socket }) {
   const fetchSessions = async () => {
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.get('http://localhost:5000/api/sessions', {
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/sessions`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setSessions(res.data);
@@ -87,7 +87,7 @@ function Dashboard({ user, onLogout, socket }) {
     }
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.get(`http://localhost:5000/api/users/search?q=${q}`, {
+      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/users/search?q=${q}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setSearchResults(res.data);
@@ -99,7 +99,7 @@ function Dashboard({ user, onLogout, socket }) {
   const createSession = async (otherUser) => {
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.post('http://localhost:5000/api/sessions', {
+      const res = await axios.post(`${import.meta.env.VITE_API_URL}/api/sessions`, {
         name: `Direct Message`,
         participantIds: [otherUser._id]
       }, {
@@ -121,7 +121,7 @@ function Dashboard({ user, onLogout, socket }) {
             animate={{ x: 0 }}
             exit={{ x: '-100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="absolute inset-y-0 left-0 w-[420px] bg-[#f0f2f5] z-50 shadow-2xl flex flex-col border-r border-slate-200"
+            className="fixed md:absolute inset-y-0 left-0 w-full md:w-[420px] bg-[#f0f2f5] z-[60] shadow-2xl flex flex-col border-r border-slate-200"
           >
             <div className="h-[110px] bg-brand flex items-end p-6 pb-4 gap-6">
               <button 
@@ -174,7 +174,7 @@ function Dashboard({ user, onLogout, socket }) {
       </AnimatePresence>
 
       {/* WhatsApp Web Style Sidebar */}
-      <aside className="w-[420px] bg-white flex flex-col border-r border-slate-200">
+      <aside className="w-full md:w-[420px] bg-white flex flex-col border-r border-slate-200 h-full">
         {/* Sidebar Header */}
         <div className="h-[60px] bg-[#f0f2f5] px-4 flex items-center justify-between">
           <div 
@@ -278,13 +278,13 @@ function Dashboard({ user, onLogout, socket }) {
         </div>
       </aside>
 
-      {/* Main Empty State (WhatsApp Web Style) */}
-      <main className="flex-1 bg-[#f8f9fa] flex flex-col items-center justify-center border-b-[6px] border-emerald-500">
+      {/* Main Empty State (WhatsApp Web Style) - Hidden on Mobile */}
+      <main className="hidden md:flex flex-1 bg-[#f8f9fa] flex flex-col items-center justify-center border-b-[6px] border-emerald-500">
         <div className="max-w-md text-center px-12">
            <div className="w-64 h-64 mx-auto mb-10 opacity-20 grayscale">
               <Globe className="w-full h-full text-slate-900" />
            </div>
-           <h1 className="text-[32px] font-light text-slate-600 mb-4 tracking-tight">Biz Insights Web</h1>
+           <h1 className="text-[32px] font-light text-slate-600 mb-4 tracking-tight">Biz Insights Chat App </h1>
            <p className="text-sm text-slate-500 leading-relaxed font-medium">
               Send and receive messages in any language securely.<br/>
               Select a conversation to begin your neural link.
