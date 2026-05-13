@@ -43,7 +43,7 @@ function Login({ onLogin }) {
         >
           <div className="inline-flex items-center justify-center w-20 h-20 bg-white rounded-3xl shadow-premium border border-slate-100 mb-8 relative group overflow-hidden">
             <div className="absolute inset-0 bg-brand/5 rounded-3xl scale-0 group-hover:scale-100 transition-transform duration-500"></div>
-            <img src="/LOGO.jpg" alt="Logo" className="w-full h-full object-cover relative z-10" />
+            <img src="/ai-chat-platform/LOGO.jpg" alt="Logo" className="w-full h-full object-cover relative z-10" />
             <Sparkles className="absolute -top-2 -right-2 w-6 h-6 text-amber-400 opacity-0 group-hover:opacity-100 transition-opacity z-20" />
           </div>
           <h1 className="text-4xl font-display font-extrabold tracking-tight text-slate-900 mb-3">

@@ -39,8 +39,8 @@ async def create_session(session_data: dict, current_user_id: str = Depends(get_
         "participants": participants,
         "createdBy": current_user_id,
         "lastMessage": "",
-        "lastMessageTime": datetime.now(),
-        "createdAt": datetime.now(),
+        "lastMessageTime": datetime.utcnow(),
+        "createdAt": datetime.utcnow(),
         "hiddenFor": []
     }
     
@@ -52,8 +52,12 @@ async def create_session(session_data: dict, current_user_id: str = Depends(get_
 @router.get("")
 async def get_sessions(current_user_id: str = Depends(get_current_user_id)):
     # Filter sessions where user is a participant AND has not hidden the session
+    # We check for both string and ObjectId to be safe in live environments
     cursor = sessions_collection.find({
-        "participants": current_user_id,
+        "$or": [
+            {"participants": current_user_id},
+            {"participants": ObjectId(current_user_id) if ObjectId.is_valid(current_user_id) else None}
+        ],
         "hiddenFor": {"$ne": current_user_id}
     }).sort("lastMessageTime", -1)
     
@@ -84,19 +88,33 @@ async def get_sessions(current_user_id: str = Depends(get_current_user_id)):
 
 @router.get("/{session_id}/messages")
 async def get_messages(session_id: str, current_user_id: str = Depends(get_current_user_id)):
-    # Verify participation
+    # Verify participation (check both string and ObjectId formats)
     session = await sessions_collection.find_one({
         "_id": ObjectId(session_id),
-        "participants": current_user_id
+        "$or": [
+            {"participants": current_user_id},
+            {"participants": ObjectId(current_user_id) if ObjectId.is_valid(current_user_id) else None}
+        ]
     })
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
-    cursor = messages_collection.find({"sessionId": session_id}).sort("createdAt", 1)
+    # Search messages by sessionId (handle both string and ObjectId if necessary)
+    cursor = messages_collection.find({
+        "$or": [
+            {"sessionId": session_id},
+            {"sessionId": ObjectId(session_id) if ObjectId.is_valid(session_id) else None}
+        ]
+    }).sort("createdAt", 1)
     
+    # Get current user's translations to merge
+    user = await users_collection.find_one({"_id": ObjectId(current_user_id)})
+    user_translations = user.get("translations", {})
+
     messages = []
     async for msg in cursor:
-        msg["_id"] = str(msg["_id"])
+        msg_id = str(msg["_id"])
+        msg["_id"] = msg_id
         # Ensure all IDs are strings for the frontend
         if "senderId" in msg:
             msg["senderId"] = str(msg["senderId"])
@@ -107,6 +125,13 @@ async def get_messages(session_id: str, current_user_id: str = Depends(get_curre
         if "status" not in msg:
             msg["status"] = "sent"
             
+        # Merge user-specific translations - fulfilling "store in the user"
+        msg["translations"] = user_translations.get(msg_id, {})
+        
+        # Also include the original language if it's the sender's own message
+        if str(msg.get("senderId")) == str(current_user_id):
+            msg["translations"][msg.get("fromLang", "English")] = msg.get("originalText")
+
         messages.append(msg)
     
     return messages
@@ -126,10 +151,12 @@ async def translate_message(message_id: str, data: dict, current_user_id: str = 
     if not msg:
         raise HTTPException(status_code=404, detail="Message not found")
         
-    translations = msg.get("translations", {})
+    # Get user document to check for cached translation - fulfilling "store in the user"
+    user = await users_collection.find_one({"_id": ObjectId(current_user_id)})
+    user_translations = user.get("translations", {})
     
-    if to_lang in translations:
-        return {"translation": translations[to_lang], "confidence": msg.get("confidence", 100), "cached": True}
+    if message_id in user_translations and to_lang in user_translations[message_id]:
+        return {"translation": user_translations[message_id][to_lang], "confidence": 100, "cached": True}
         
     # Translate using the existing service
     original_text = msg.get("originalText")
@@ -142,10 +169,10 @@ async def translate_message(message_id: str, data: dict, current_user_id: str = 
             
         translated_text = result["translation"]
         
-        # Cache it
-        await messages_collection.update_one(
-            {"_id": ObjectId(message_id)},
-            {"$set": {f"translations.{to_lang}": translated_text}}
+        # Store in User's document - fulfilling "store in the user"
+        await users_collection.update_one(
+            {"_id": ObjectId(current_user_id)},
+            {"$set": {f"translations.{message_id}.{to_lang}": translated_text}}
         )
         
         return {"translation": translated_text, "confidence": result.get("confidence", 90), "cached": False}

@@ -1,4 +1,3 @@
-# pyrefly: ignore [missing-import]
 import uvicorn
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,10 +24,13 @@ app = FastAPI(title="Biz Insights Multilingual Translator API", strict_slashes=F
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "*"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Request Logging Middleware
@@ -56,8 +58,16 @@ app.include_router(users.router, prefix="/api/users", tags=["users"])
 app.include_router(sessions.router, prefix="/api/sessions", tags=["sessions"])
 
 # Socket.io Setup
-sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
-socket_app = socketio.ASGIApp(sio, app)
+sio = socketio.AsyncServer(
+    async_mode="asgi",
+    cors_allowed_origins="*"
+)
+
+socket_app = socketio.ASGIApp(
+    sio,
+    other_asgi_app=app,
+    socketio_path="socket.io"
+)
 
 @sio.on('connect')
 async def connect(sid, environ, auth):
@@ -93,66 +103,82 @@ async def join_user_room(sid, data):
 
 @sio.on('send_message')
 async def send_message(sid, data):
-    session_data = await sio.get_session(sid)
-    user_id = session_data.get("userId")
-    
     session_id = data.get("sessionId")
     text = data.get("text")
     from_lang = data.get("fromLang")
     domain = data.get("domain", "general")
     
-    logger.info(f"Incoming message: {text} from {from_lang} in session {session_id} (User: {user_id})")
+    # Get user_id from session
+    session_data = await sio.get_session(sid)
+    user_id = session_data.get("userId")
+    
+    if not user_id:
+        logger.warning(f"send_message: No user_id in socket session for sid {sid}. Attempting recovery...")
+        # Fallback: the frontend can pass userId in data for extra safety in multi-worker environments
+        user_id = data.get("userId")
+        if not user_id:
+            logger.error(f"send_message aborted: Could not identify user for sid {sid}")
+            await sio.emit('error', {"message": "Session expired. Please refresh."}, room=sid)
+            return
+
+    if not session_id or not text:
+        logger.error(f"send_message aborted: Missing session_id or text. Data: {data}")
+        return
+
+    logger.info(f"Attempting to save message in session {session_id} from user {user_id}")
 
     try:
-        # 1. Save to DB (without translating initially)
+        # 1. Save to Messages Collection
         new_message = {
-            "sessionId": session_id,
-            "senderId": user_id,
+            "sessionId": str(session_id),
+            "senderId": str(user_id),
             "originalText": text,
             "fromLang": from_lang,
             "domain": domain,
-            "translations": {from_lang: text},
-            "confidence": 100,
-            "createdAt": datetime.now()
+            # No translations field here - fulfilling "not the sender sends"
+            "status": "sent",
+            "createdAt": datetime.utcnow()
         }
-        result = await messages_collection.insert_one(new_message)
-        new_message["_id"] = str(result.inserted_id)
         
-        # 2. Update session and CLEAR hiddenFor (so it reappears for everyone)
+        result = await messages_collection.insert_one(new_message)
+        message_id = str(result.inserted_id)
+        new_message["_id"] = message_id
+        
+        # 2. Update Session (Last Message, Time, and Unhide)
         await sessions_collection.update_one(
             {"_id": ObjectId(session_id)},
             {
                 "$set": {
                     "lastMessage": text,
-                    "lastMessageTime": datetime.now(),
-                    "hiddenFor": []
+                    "lastMessageTime": new_message["createdAt"],
+                    "hiddenFor": [] # Reset hiddenFor so chat reappears for everyone
                 }
             }
         )
         
-        # 3. Emit to room
+        # 3. Prepare for Emit
         new_message["createdAt"] = new_message["createdAt"].isoformat()
+        
+        # 4. Broadcast to the room
         await sio.emit('receive_message', new_message, room=session_id)
-        logger.info(f"Broadcasted message {new_message['_id']} to room {session_id}")
+        logger.info(f"Message {message_id} saved and broadcasted to {session_id}")
 
-        # 4. Notify participants for Dashboard updates (wrapped to prevent blocking)
+        # 5. Notify all participants for Dashboard updates
         try:
             session_doc = await sessions_collection.find_one({"_id": ObjectId(session_id)})
             if session_doc:
                 for p_id in session_doc.get("participants", []):
-                    # Ensure p_id is a string for the room name
                     await sio.emit('session_update', {
                         "sessionId": session_id,
                         "lastMessage": text,
                         "lastMessageTime": new_message["createdAt"]
                     }, room=f"user_{str(p_id)}")
-                logger.info(f"Dashboard update sent to participants of {session_id}")
         except Exception as dash_err:
-            logger.error(f"Dashboard update failed: {str(dash_err)}")
-        
+            logger.error(f"Dashboard update notification failed: {dash_err}")
+
     except Exception as e:
-        logger.error(f"SOCKET MESSAGE ERROR [Session: {session_id}]: {str(e)}", exc_info=True)
-        await sio.emit('error', {"message": "Neural Link transmission failed", "detail": str(e)}, to=sid)
+        logger.error(f"CRITICAL ERROR in send_message: {str(e)}", exc_info=True)
+        await sio.emit('error', {"message": "Failed to save message", "detail": str(e)}, room=sid)
 
 @sio.on('typing')
 async def typing(sid, data):

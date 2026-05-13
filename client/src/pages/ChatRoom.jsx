@@ -15,31 +15,16 @@ function ChatRoom({ user, onUserUpdate, socket }) {
   const [isFetchingMessages, setIsFetchingMessages] = useState(false);
   const [inputText, setInputText] = useState('');
   const [session, setSession] = useState(null);
-  const [isRecording, setIsRecording] = useState(false);
   const [myLang, setMyLang] = useState(() => user.preferredLanguage || localStorage.getItem('pref_myLang') || 'English');
-  const [isConfirmingLang, setIsConfirmingLang] = useState(false);
-  const [pendingLang, setPendingLang] = useState(null);
 
+  const [isRecording, setIsRecording] = useState(false);
   useEffect(() => {
     localStorage.setItem('pref_myLang', myLang);
   }, [myLang]);
 
-  // Check for pending global language update on mount
-  useEffect(() => {
-    const pending = localStorage.getItem('pending_history_translate');
-    if (pending) {
-      setPendingLang(pending);
-      setIsConfirmingLang(true);
-      localStorage.removeItem('pending_history_translate');
-    }
-  }, []);
 
   const handleLanguageChangeRequest = async (newLang) => {
     if (newLang === myLang) return;
-    
-    // Trigger modal for history choice
-    setPendingLang(newLang);
-    setIsConfirmingLang(true);
     
     // Always update global language for FUTURE messages immediately
     setMyLang(newLang);
@@ -55,19 +40,6 @@ function ChatRoom({ user, onUserUpdate, socket }) {
     } catch (err) {
       console.error('Failed to update language profile');
     }
-  };
-
-  const confirmHistoryTranslation = () => {
-    // Clear the cache for this session so everything re-translates to the new language
-    localStorage.removeItem(`cached_messages_${sessionId}`);
-    setIsConfirmingLang(false);
-    window.location.reload();
-  };
-
-  const cancelHistoryTranslation = () => {
-    // Keep the current cache (which has the old languages)
-    setIsConfirmingLang(false);
-    window.location.reload();
   };
 
   const [domain, setDomain] = useState('general');
@@ -106,7 +78,7 @@ function ChatRoom({ user, onUserUpdate, socket }) {
 
     socket.emit('join_session', sessionId);
 
-    const handleReceiveMessage = (message) => {
+    const handleReceiveMessage = async (message) => {
       setIsTranslating(false);
       
       // Ensure we have a text field for UI consistency
@@ -114,7 +86,31 @@ function ChatRoom({ user, onUserUpdate, socket }) {
         message.text = message.originalText;
       }
       
-      const messageWithLang = { ...message, targetLang: myLang };
+      let messageWithLang = { ...message };
+      
+      // Auto-translate incoming messages to the user's preferred language
+      // ONLY if it's not the user's own message - fulfilling "keep user's message as it is"
+      if (myLang && String(message.senderId) !== String(user.id)) {
+        try {
+          const token = localStorage.getItem('token');
+          const res = await axios.post(`${import.meta.env.VITE_API_URL}/api/sessions/messages/${message._id}/translate`, {
+            toLang: myLang,
+            domain: domain
+          }, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          
+          messageWithLang = {
+            ...messageWithLang,
+            translations: {
+              ...(messageWithLang.translations || {}),
+              [myLang]: res.data.translation
+            }
+          };
+        } catch (err) {
+          console.error("Auto-translation error for incoming message:", err);
+        }
+      }
       
       setMessages(prev => {
         if (messageWithLang.senderId === user.id) {
@@ -137,14 +133,20 @@ function ChatRoom({ user, onUserUpdate, socket }) {
           });
         }
         
-        return [...prev, messageWithLang];
+        const updated = [...prev, messageWithLang];
+        localStorage.setItem(`cached_messages_${sessionId}`, JSON.stringify(updated));
+        return updated;
       });
     };
 
     const handleStatusUpdate = (data) => {
-      setMessages(prev => prev.map(m => 
-        m._id === data.messageId ? { ...m, status: data.status } : m
-      ));
+      setMessages(prev => {
+        const updated = prev.map(m => 
+          m._id === data.messageId ? { ...m, status: data.status } : m
+        );
+        localStorage.setItem(`cached_messages_${sessionId}`, JSON.stringify(updated));
+        return updated;
+      });
     };
 
     const handleUserTyping = (data) => {
@@ -166,7 +168,7 @@ function ChatRoom({ user, onUserUpdate, socket }) {
       socket.off('user_typing', handleUserTyping);
       socket.off('message_status_update', handleStatusUpdate);
     };
-  }, [socket, sessionId, user.id]);
+  }, [socket, sessionId, user.id, myLang, domain]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -193,15 +195,9 @@ function ChatRoom({ user, onUserUpdate, socket }) {
         headers: { Authorization: `Bearer ${token}` }
       });
       
-      const cached = JSON.parse(localStorage.getItem(`cached_messages_${sessionId}`) || '[]');
-      const messagesWithLang = res.data.map(msg => {
-        const cachedMsg = cached.find(cm => cm._id === msg._id);
-        // Keep the old targetLang if it exists, otherwise use current myLang
-        return { ...msg, targetLang: cachedMsg?.targetLang || myLang };
-      });
-      
-      setMessages(messagesWithLang);
-      localStorage.setItem(`cached_messages_${sessionId}`, JSON.stringify(messagesWithLang));
+      const messagesData = res.data;
+      setMessages(messagesData);
+      localStorage.setItem(`cached_messages_${sessionId}`, JSON.stringify(messagesData));
     } catch (err) {
       console.error('Failed to fetch messages');
     } finally {
@@ -245,6 +241,7 @@ function ChatRoom({ user, onUserUpdate, socket }) {
     
     socket.emit('send_message', {
       sessionId,
+      userId: user.id, // Fallback for multi-worker environments
       text: inputText,
       fromLang: myLang,
       domain
@@ -283,48 +280,6 @@ function ChatRoom({ user, onUserUpdate, socket }) {
 
   return (
     <div className="flex flex-col h-screen bg-[#efeae2] relative overflow-hidden font-sans">
-      {/* Language Confirmation Modal */}
-      <AnimatePresence>
-        {isConfirmingLang && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsConfirmingLang(false)}
-              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
-            />
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="bg-white rounded-2xl p-6 shadow-2xl max-w-sm w-full relative z-10"
-            >
-              <div className="w-12 h-12 bg-brand/10 rounded-full flex items-center justify-center mb-4">
-                <Globe className="w-6 h-6 text-brand" />
-              </div>
-              <h3 className="text-xl font-bold text-slate-900 mb-2">Change Language?</h3>
-              <p className="text-slate-500 text-sm leading-relaxed mb-6">
-                Language updated to <span className="font-bold text-slate-900">{pendingLang}</span> for new messages. Would you like to re-translate the previous chat history as well?
-              </p>
-              <div className="flex gap-3">
-                <button 
-                  onClick={cancelHistoryTranslation}
-                  className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 transition-colors text-sm"
-                >
-                  Don't change
-                </button>
-                <button 
-                  onClick={confirmHistoryTranslation}
-                  className="flex-1 px-4 py-2.5 rounded-xl bg-brand text-white font-semibold shadow-lg shadow-brand/20 hover:bg-brand/90 transition-colors text-sm"
-                >
-                  Translate
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
       {/* WhatsApp Doodle Pattern Background */}
       <div className="absolute inset-0 opacity-[0.06] pointer-events-none z-0" style={{ backgroundImage: 'url("https://w0.peakpx.com/wallpaper/580/650/wallpaper-whatsapp-doodle-patterns-chat-background-texture.jpg")', backgroundSize: '400px' }}></div>
@@ -452,12 +407,12 @@ function ChatRoom({ user, onUserUpdate, socket }) {
       {/* Message Feed */}
       <div className="flex-1 overflow-y-auto p-4 md:px-10 lg:px-32 space-y-2 custom-scrollbar relative z-10 no-scrollbar">
         <AnimatePresence>
-        {messages.map((msg, i) => (
+          {messages.map((msg, i) => (
           <MessageBubble 
             key={msg._id || i}
             msg={msg}
             isOwn={String(msg.senderId) === String(user.id)}
-            targetLang={msg.targetLang || myLang}
+            myLang={myLang}
             domain={domain}
           />
         ))}
@@ -516,58 +471,18 @@ function ChatRoom({ user, onUserUpdate, socket }) {
   );
 }
 
-const MessageBubble = ({ msg, isOwn, targetLang, domain }) => {
-  const [displayText, setDisplayText] = useState(() => {
-    if (msg.translations && msg.translations[targetLang]) {
-      return msg.translations[targetLang];
-    }
-    return msg.originalText || msg.text;
-  });
+const MessageBubble = ({ msg, isOwn, myLang, domain }) => {
+  const [displayText, setDisplayText] = useState(msg.originalText || msg.text);
   const [isTranslating, setIsTranslating] = useState(false);
 
   useEffect(() => {
-    // If the message is already in the target language (judged by LLM previously or fromLang)
-    // we still check if we have a translation cached.
-    
-    if (msg.translations && msg.translations[targetLang]) {
-      setDisplayText(msg.translations[targetLang]);
-      return;
+    // Show translation if available for the user's current preferred language
+    if (msg.translations && msg.translations[myLang]) {
+      setDisplayText(msg.translations[myLang]);
+    } else {
+      setDisplayText(msg.originalText || msg.text);
     }
-
-    const fetchTranslation = async () => {
-      if (!msg._id || msg._id.toString().startsWith('temp-') || isTranslating) return;
-      
-      // We removed the strict fromLang === targetLang check here 
-      // to allow the AI to detect if the content actually needs translation 
-      // (e.g. if the user typed Hindi while their setting was English).
-      
-      setIsTranslating(true);
-      try {
-        const token = localStorage.getItem('token');
-        const res = await axios.post(`${import.meta.env.VITE_API_URL}/api/sessions/messages/${msg._id}/translate`, {
-          toLang: targetLang,
-          domain: domain
-        }, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        
-        const translatedText = res.data.translation;
-        setDisplayText(translatedText);
-        
-        // Cache the translation in the message object (locally)
-        // We avoid direct mutation of the prop object by checking if we need to update
-        if (!msg.translations) msg.translations = {};
-        msg.translations[targetLang] = translatedText;
-      } catch (err) {
-        console.error("Translation error:", err);
-        setDisplayText(msg.originalText || msg.text);
-      } finally {
-        setIsTranslating(false);
-      }
-    };
-
-    fetchTranslation();
-  }, [targetLang, msg._id, domain, msg.fromLang]);
+  }, [myLang, msg.translations]);
 
   return (
     <motion.div 

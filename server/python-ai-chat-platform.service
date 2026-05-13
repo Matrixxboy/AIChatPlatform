@@ -1,0 +1,15 @@
+[Unit]
+Description=python-ai-chat-platform
+After=network.target
+
+[Service]
+User=ubuntu
+Group=www-data
+WorkingDirectory=/var/www/python-ai-chat-platform
+EnvironmentFile=/var/www/python-ai-chat-platform/.env
+ExecStart=/var/www/python-ai-chat-platform/venv/bin/python -m uvicorn main:socket_app --host 0.0.0.0 --port 8004
+
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

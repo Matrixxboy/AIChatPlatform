@@ -298,7 +298,7 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
           </div>
           <div className="flex items-center gap-2 text-slate-500">
             <div className="w-8 h-8 rounded-lg overflow-hidden border border-slate-200 shadow-sm mr-1">
-               <img src="/LOGO.jpg" alt="Company Logo" className="w-full h-full object-cover" />
+               <img src="/ai-chat-platform/LOGO.jpg" alt="Company Logo" className="w-full h-full object-cover" />
             </div>
             <button className="p-2 hover:bg-slate-200 rounded-full transition-all"><MessageSquare className="w-5 h-5" /></button>
             <button onClick={onLogout} className="p-2 hover:bg-slate-200 rounded-full transition-all hover:text-red-500"><LogOut className="w-5 h-5" /></button>
@@ -445,7 +445,7 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
       <main className="hidden md:flex flex-1 bg-[#f8f9fa] flex-col items-center justify-center border-b-[6px] border-brand">
         <div className="max-w-md text-center px-12">
            <div className="w-64 h-64 mx-auto mb-10 overflow-hidden rounded-[40px] shadow-2xl border-4 border-white grayscale-[0.2]">
-              <img src="/LOGO.jpg" alt="Neural Link Logo" className="w-full h-full object-cover" />
+              <img src="/ai-chat-platform/LOGO.jpg" alt="Neural Link Logo" className="w-full h-full object-cover" />
            </div>
            <h1 className="text-[32px] font-light text-slate-600 mb-4 tracking-tight">Biz Insights Chat App </h1>
            <p className="text-sm text-slate-500 leading-relaxed font-medium">

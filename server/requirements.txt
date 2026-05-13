@@ -1,5 +1,6 @@
 fastapi
 uvicorn
+gunicorn
 motor
 pymongo
 python-socketio
@@ -12,3 +13,5 @@ pydantic
 pydantic-settings
 email-validator
 websockets
+python-multipart
+uvloop; sys_platform != 'win32'

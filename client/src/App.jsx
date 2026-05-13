@@ -44,9 +44,17 @@ function App() {
     if (savedUser && token) {
       setUser(JSON.parse(savedUser));
       
-      const newSocket = io(API_URL, {
+      const hasPrefix = API_URL.includes('/ai-chat-platform');
+      const socketBaseUrl = hasPrefix ? API_URL.replace('/ai-chat-platform', '') : API_URL;
+      const socketPath = hasPrefix ? '/ai-chat-platform/socket.io' : '/socket.io';
+      
+      const newSocket = io(socketBaseUrl, {
+        path: socketPath,
         auth: { token },
-        reconnection: true
+        transports: ['polling', 'websocket'],
+        reconnection: true,
+        forceNew: true,
+        secure: socketBaseUrl.startsWith('https')
       });
       setSocket(newSocket);
     }
@@ -73,9 +81,17 @@ function App() {
     localStorage.setItem('user', JSON.stringify(userData));
     localStorage.setItem('token', token);
     
-    const newSocket = io(API_URL, {
+    const hasPrefix = API_URL.includes('/ai-chat-platform');
+    const socketBaseUrl = hasPrefix ? API_URL.replace('/ai-chat-platform', '') : API_URL;
+    const socketPath = hasPrefix ? '/ai-chat-platform/socket.io' : '/socket.io';
+    
+    const newSocket = io(socketBaseUrl, {
+      path: socketPath,
       auth: { token },
-      reconnection: true
+      transports: ['polling', 'websocket'],
+      reconnection: true,
+      forceNew: true,
+      secure: socketBaseUrl.startsWith('https')
     });
     setSocket(newSocket);
   };
@@ -101,7 +117,7 @@ function App() {
           <div className="w-20 h-20 border-4 border-slate-200 border-t-brand rounded-full animate-spin"></div>
           <div className="absolute inset-0 flex items-center justify-center p-2">
             <div className="w-full h-full rounded-full overflow-hidden shadow-lg animate-pulse">
-               <img src="/LOGO.jpg" alt="Loading Logo" className="w-full h-full object-cover" />
+               <img src="/ai-chat-platform/LOGO.jpg" alt="Loading Logo" className="w-full h-full object-cover" />
             </div>
           </div>
         </div>
@@ -114,7 +130,7 @@ function App() {
   }
 
   return (
-    <Router>
+    <Router basename="/ai-chat-platform">
       <div className="relative">
         <Routes>
           <Route path="/login" element={!user ? <Login onLogin={handleLogin} /> : <Navigate to="/" />} />
