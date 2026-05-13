@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import io from 'socket.io-client';
 import axios from 'axios';
-import { Search, Plus, MessageSquare, Mic, Send, ArrowLeft, Globe, Sparkles, LogOut, X, Phone, Video, MoreVertical, MoreHorizontal, Globe2, Check, CheckCheck } from 'lucide-react';
+import { Search, Plus, MessageSquare, Mic, Send, ArrowLeft, Globe, Sparkles, LogOut, X, Phone, Video, MoreVertical, MoreHorizontal, Globe2, Check, CheckCheck, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 function ChatRoom({ user, onUserUpdate, socket }) {
@@ -16,6 +16,10 @@ function ChatRoom({ user, onUserUpdate, socket }) {
   const [inputText, setInputText] = useState('');
   const [session, setSession] = useState(null);
   const [myLang, setMyLang] = useState(() => user.preferredLanguage || localStorage.getItem('pref_myLang') || 'English');
+  const [isTranslationModalOpen, setIsTranslationModalOpen] = useState(false);
+  const [translationTargetLang, setTranslationTargetLang] = useState(myLang);
+  const [isProcessingTranslation, setIsProcessingTranslation] = useState(false);
+  const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
 
   const [isRecording, setIsRecording] = useState(false);
   useEffect(() => {
@@ -26,19 +30,60 @@ function ChatRoom({ user, onUserUpdate, socket }) {
   const handleLanguageChangeRequest = async (newLang) => {
     if (newLang === myLang) return;
     
-    // Always update global language for FUTURE messages immediately
+    // 1. Update local state and profile immediately
     setMyLang(newLang);
     onUserUpdate({ preferredLanguage: newLang });
     
-    // Update user profile in background
     try {
       const token = localStorage.getItem('token');
       await axios.patch(`${import.meta.env.VITE_API_URL}/api/users/profile`, 
         { preferredLanguage: newLang },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      
+      // 2. Open the confirmation modal - fulfilling "ask user before calling translating all api"
+      setTranslationTargetLang(newLang);
+      setIsTranslationModalOpen(true);
+      
     } catch (err) {
       console.error('Failed to update language profile');
+    }
+  };
+
+  const handleDeleteConversation = async () => {
+    if (!window.confirm('Are you sure you want to permanently delete this entire conversation? This action cannot be undone.')) return;
+    
+    try {
+      const token = localStorage.getItem('token');
+      await axios.delete(`${import.meta.env.VITE_API_URL}/api/sessions/${sessionId}/permanent`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      navigate('/');
+    } catch (err) {
+      console.error('Failed to delete conversation:', err);
+      alert('Failed to delete conversation. Please try again.');
+    }
+  };
+
+  const handleTranslateFullChat = async (targetLangOverride = null) => {
+    const target = targetLangOverride || translationTargetLang;
+    setIsProcessingTranslation(true);
+    try {
+      const token = localStorage.getItem('token');
+      await axios.post(`${import.meta.env.VITE_API_URL}/api/sessions/${sessionId}/translate-all`, {
+        toLang: target,
+        domain: domain
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      // Refresh messages to show the newly stored translations
+      await fetchMessages();
+    } catch (err) {
+      console.error('Batch translation failed:', err);
+    } finally {
+      setIsProcessingTranslation(false);
+      setIsTranslationModalOpen(false);
     }
   };
 
@@ -86,31 +131,7 @@ function ChatRoom({ user, onUserUpdate, socket }) {
         message.text = message.originalText;
       }
       
-      let messageWithLang = { ...message };
-      
-      // Auto-translate incoming messages to the user's preferred language
-      // ONLY if it's not the user's own message - fulfilling "keep user's message as it is"
-      if (myLang && String(message.senderId) !== String(user.id)) {
-        try {
-          const token = localStorage.getItem('token');
-          const res = await axios.post(`${import.meta.env.VITE_API_URL}/api/sessions/messages/${message._id}/translate`, {
-            toLang: myLang,
-            domain: domain
-          }, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          
-          messageWithLang = {
-            ...messageWithLang,
-            translations: {
-              ...(messageWithLang.translations || {}),
-              [myLang]: res.data.translation
-            }
-          };
-        } catch (err) {
-          console.error("Auto-translation error for incoming message:", err);
-        }
-      }
+      const messageWithLang = { ...message };
       
       setMessages(prev => {
         if (messageWithLang.senderId === user.id) {
@@ -280,6 +301,62 @@ function ChatRoom({ user, onUserUpdate, socket }) {
 
   return (
     <div className="flex flex-col h-screen bg-[#efeae2] relative overflow-hidden font-sans">
+      {/* Translation Modal - New Separate Feature */}
+      <AnimatePresence>
+        {isTranslationModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsTranslationModalOpen(false)}
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="bg-white rounded-2xl p-6 shadow-2xl max-w-sm w-full relative z-10"
+            >
+              <div className="w-12 h-12 bg-brand/10 rounded-full flex items-center justify-center mb-4">
+                <Globe2 className="w-6 h-6 text-brand" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900 mb-2">Translate Full Chat?</h3>
+              <p className="text-slate-500 text-sm leading-relaxed mb-4">
+                This will convert the whole conversation into your selected language and save it to your history.
+              </p>
+              
+              <div className="mb-6">
+                <select 
+                  value={translationTargetLang}
+                  onChange={(e) => setTranslationTargetLang(e.target.value)}
+                  className="w-full p-3 rounded-xl border border-slate-200 text-slate-700 font-medium focus:ring-2 focus:ring-brand/20 outline-none"
+                >
+                  {languages.map(l => <option key={l} value={l}>{l}</option>)}
+                </select>
+              </div>
+
+              <div className="flex gap-3">
+                <button 
+                  disabled={isProcessingTranslation}
+                  onClick={() => setIsTranslationModalOpen(false)}
+                  className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 transition-colors text-sm disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button 
+                  disabled={isProcessingTranslation}
+                  onClick={handleTranslateFullChat}
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-brand text-white font-semibold shadow-lg shadow-brand/20 hover:bg-brand/90 transition-colors text-sm flex items-center justify-center gap-2 disabled:opacity-70"
+                >
+                  {isProcessingTranslation && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                  {isProcessingTranslation ? 'Processing...' : 'Translate All'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* WhatsApp Doodle Pattern Background */}
       <div className="absolute inset-0 opacity-[0.06] pointer-events-none z-0" style={{ backgroundImage: 'url("https://w0.peakpx.com/wallpaper/580/650/wallpaper-whatsapp-doodle-patterns-chat-background-texture.jpg")', backgroundSize: '400px' }}></div>
@@ -328,9 +405,12 @@ function ChatRoom({ user, onUserUpdate, socket }) {
                  </p>
               </div>
 
-              <div className="bg-white px-8 py-4 shadow-sm flex items-center gap-4 text-red-500 cursor-pointer hover:bg-red-50 transition-all">
+              <div 
+                 onClick={handleDeleteConversation}
+                 className="bg-white px-8 py-4 shadow-sm flex items-center gap-4 text-red-500 cursor-pointer hover:bg-red-50 transition-all"
+              >
                  <LogOut className="w-5 h-5" />
-                 <p className="font-medium">Block {session?.name}</p>
+                 <p className="font-medium">Delete Conversation Permanently</p>
               </div>
             </div>
           </motion.div>
@@ -398,8 +478,59 @@ function ChatRoom({ user, onUserUpdate, socket }) {
           </div>
           
           <div className="flex items-center gap-1 text-slate-500">
+             <button 
+                onClick={() => setIsTranslationModalOpen(true)}
+                className="p-2 rounded-full transition-all flex items-center gap-2 px-3 hover:bg-slate-200/50 text-brand font-bold"
+                title="Translate Entire Conversation"
+             >
+                <Globe2 className="w-5 h-5" />
+                <span className="text-xs hidden sm:inline">Translate History</span>
+             </button>
              <button className="p-2 hover:bg-slate-200/50 rounded-full transition-all"><Search className="w-5 h-5" /></button>
-             <button className="p-2 hover:bg-slate-200/50 rounded-full transition-all"><MoreHorizontal className="w-5 h-5" /></button>
+             <div className="relative">
+                <button 
+                  onClick={() => setIsHeaderMenuOpen(!isHeaderMenuOpen)}
+                  className={`p-2 hover:bg-slate-200/50 rounded-full transition-all ${isHeaderMenuOpen ? 'bg-slate-200' : ''}`}
+                >
+                  <MoreHorizontal className="w-5 h-5" />
+                </button>
+                
+                <AnimatePresence>
+                  {isHeaderMenuOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setIsHeaderMenuOpen(false)} />
+                      <motion.div 
+                        initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                        className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 overflow-hidden py-1"
+                      >
+                        <button 
+                          onClick={() => {
+                            setIsHeaderMenuOpen(false);
+                            setIsTranslationModalOpen(true);
+                          }}
+                          className="w-full px-4 py-3 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-3 transition-colors"
+                        >
+                          <Globe2 className="w-4 h-4 text-brand" />
+                          Translate Chat History
+                        </button>
+                        <div className="h-[1px] bg-slate-100 my-1" />
+                        <button 
+                          onClick={() => {
+                            setIsHeaderMenuOpen(false);
+                            handleDeleteConversation();
+                          }}
+                          className="w-full px-4 py-3 text-left text-sm font-medium text-red-600 hover:bg-red-50 flex items-center gap-3 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          Delete Chat Permanently
+                        </button>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+             </div>
           </div>
         </div>
       </header>

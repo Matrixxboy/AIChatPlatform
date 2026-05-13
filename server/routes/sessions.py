@@ -125,8 +125,13 @@ async def get_messages(session_id: str, current_user_id: str = Depends(get_curre
         if "status" not in msg:
             msg["status"] = "sent"
             
-        # Merge user-specific translations - fulfilling "store in the user"
-        msg["translations"] = user_translations.get(msg_id, {})
+        # Use shared translations from the message document for efficiency - fulfilling "Optimize translation costs"
+        # We also still check the user document for any private translations if they exist (migration path)
+        shared_translations = msg.get("translations", {})
+        user_specific_translations = user_translations.get(msg_id, {})
+        
+        # Merge them (User specific takes precedence if exists, though they should be identical)
+        msg["translations"] = {**shared_translations, **user_specific_translations}
         
         # Also include the original language if it's the sender's own message
         if str(msg.get("senderId")) == str(current_user_id):
@@ -151,10 +156,14 @@ async def translate_message(message_id: str, data: dict, current_user_id: str = 
     if not msg:
         raise HTTPException(status_code=404, detail="Message not found")
         
-    # Get user document to check for cached translation - fulfilling "store in the user"
+    # 1. Check for cached translation in Message document (Shared Cache) - fulfilling "Optimize translation costs"
+    shared_translations = msg.get("translations", {})
+    if to_lang in shared_translations:
+        return {"translation": shared_translations[to_lang], "confidence": 100, "cached": True}
+        
+    # 2. Check for cached translation in User document (User Cache)
     user = await users_collection.find_one({"_id": ObjectId(current_user_id)})
     user_translations = user.get("translations", {})
-    
     if message_id in user_translations and to_lang in user_translations[message_id]:
         return {"translation": user_translations[message_id][to_lang], "confidence": 100, "cached": True}
         
@@ -169,7 +178,11 @@ async def translate_message(message_id: str, data: dict, current_user_id: str = 
             
         translated_text = result["translation"]
         
-        # Store in User's document - fulfilling "store in the user"
+        # Store in both for maximum persistence and future sharing
+        await messages_collection.update_one(
+            {"_id": ObjectId(message_id)},
+            {"$set": {f"translations.{to_lang}": translated_text}}
+        )
         await users_collection.update_one(
             {"_id": ObjectId(current_user_id)},
             {"$set": {f"translations.{message_id}.{to_lang}": translated_text}}
@@ -183,10 +196,113 @@ async def translate_message(message_id: str, data: dict, current_user_id: str = 
 @router.post("/messages/{message_id}/seen")
 async def mark_message_seen(message_id: str, current_user_id: str = Depends(get_current_user_id)):
     await messages_collection.update_one(
-        {"_id": ObjectId(message_id), "senderId": {"$ne": current_user_id}},
-        {"$set": {"status": "seen", "seenAt": datetime.now()}}
+        {"_id": ObjectId(message_id)},
+        {"$set": {"status": "seen"}}
     )
     return {"message": "Status updated to seen"}
+
+@router.delete("/{session_id}/permanent")
+async def delete_session_permanently(session_id: str, current_user_id: str = Depends(get_current_user_id)):
+    # 1. Check if session exists and user is part of it
+    if not ObjectId.is_valid(session_id):
+        raise HTTPException(status_code=400, detail="Invalid session ID")
+        
+    session = await sessions_collection.find_one({"_id": ObjectId(session_id)})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    # Check if current_user_id is in participants list
+    participants = [str(p) for p in session.get("participants", [])]
+    if current_user_id not in participants:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this session")
+        
+    # 2. Delete all messages associated with this session
+    await messages_collection.delete_many({
+        "$or": [
+            {"sessionId": session_id},
+            {"sessionId": ObjectId(session_id)}
+        ]
+    })
+    
+    # 3. Delete the session itself
+    await sessions_collection.delete_one({"_id": ObjectId(session_id)})
+    
+    return {"message": "Conversation and all associated messages deleted permanently from the database"}
+
+@router.post("/{session_id}/translate-all")
+async def translate_all_messages(session_id: str, data: dict, current_user_id: str = Depends(get_current_user_id)):
+    to_lang = data.get("toLang")
+    domain = data.get("domain", "general")
+    
+    if not to_lang:
+        raise HTTPException(status_code=400, detail="toLang is required")
+        
+    # 1. Fetch all messages for this session
+    cursor = messages_collection.find({
+        "$or": [
+            {"sessionId": session_id},
+            {"sessionId": ObjectId(session_id) if ObjectId.is_valid(session_id) else None}
+        ]
+    })
+    
+    # 2. Get current user's existing translations
+    user = await users_collection.find_one({"_id": ObjectId(current_user_id)})
+    user_translations = user.get("translations", {})
+    
+    missing_messages = []
+    async for msg in cursor:
+        msg_id = str(msg["_id"])
+        
+        # Check both shared and user cache
+        shared_trans = msg.get("translations", {})
+        user_trans = user_translations.get(msg_id, {})
+        
+        if to_lang not in shared_trans and to_lang not in user_trans:
+            missing_messages.append({
+                "id": msg_id,
+                "text": msg.get("originalText") or msg.get("text", "")
+            })
+            
+    if not missing_messages:
+        return {"message": "All messages already translated", "count": 0}
+        
+    # 3. Translate missing messages in batches of 15 - fulfilling "utilise the api call"
+    from services.translation import batch_translate
+    
+    new_translations_map = {}
+    chunk_size = 15
+    for i in range(0, len(missing_messages), chunk_size):
+        chunk = missing_messages[i : i + chunk_size]
+        try:
+            results = await batch_translate(chunk, to_lang, domain)
+            for res in results:
+                msg_id = res.get("id")
+                trans_text = res.get("translation")
+                if msg_id and trans_text:
+                    new_translations_map[f"translations.{msg_id}.{to_lang}"] = trans_text
+        except Exception as e:
+            logger.error(f"Chunk Translation Error: {e}")
+
+    # 4. Update Both Collections in batch
+    if new_translations_map:
+        # Update User Document
+        await users_collection.update_one(
+            {"_id": ObjectId(current_user_id)},
+            {"$set": new_translations_map}
+        )
+        
+        # Update Message Documents individually (or in batch if possible)
+        for key, text in new_translations_map.items():
+            # key is like "translations.MSG_ID.LANG"
+            parts = key.split('.')
+            m_id = parts[1]
+            l_code = parts[2]
+            await messages_collection.update_one(
+                {"_id": ObjectId(m_id)},
+                {"$set": {f"translations.{l_code}": text}}
+            )
+        
+    return {"message": "Batch translation complete", "count": len(new_translations_map)}
 
 @router.delete("/{session_id}")
 async def delete_session(session_id: str, current_user_id: str = Depends(get_current_user_id)):

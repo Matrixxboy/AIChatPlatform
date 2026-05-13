@@ -120,6 +120,84 @@ Return ONLY a valid JSON object:
         logger.error(f"OpenRouter Connection/Request Error: {str(e)}")
         return None
 
+async def batch_translate(messages, to_lang, domain="general"):
+    """
+    Translate multiple messages in a single LLM call.
+    messages: list of dicts [{"id": str, "text": str}, ...]
+    """
+    if not messages:
+        return []
+        
+    # Prepare the batch for the prompt
+    batch_input = []
+    for msg in messages:
+        # Simple escaping for JSON-in-prompt safety
+        safe_text = msg["text"].replace('"', '\\"').replace('\n', ' ')
+        batch_input.append({"id": msg["id"], "text": safe_text})
+        
+    batch_json = json.dumps(batch_input)
+    
+    prompt = f"""
+You are a high-fidelity neural translation engine.
+Your goal is to translate a batch of messages to "{to_lang}".
+
+TASK:
+Translate the following list of messages. Return them in the same order with their original IDs.
+If a message is already in "{to_lang}", keep it exactly as is.
+
+INPUT BATCH (JSON):
+{batch_json}
+
+RESPONSE FORMAT:
+Return ONLY a valid JSON object:
+{{
+    "translations": [
+        {{"id": "msg_id_1", "translation": "translated_text_1"}},
+        {{"id": "msg_id_2", "translation": "translated_text_2"}}
+    ]
+}}
+"""
+
+    try:
+        async with httpx.AsyncClient(timeout=40.0) as client:
+            logger.info(f"Batch translating {len(messages)} messages to {to_lang}")
+            response = await client.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
+                    "X-Title": "Biz Insights Translator"
+                },
+                json={
+                    "model": "openai/gpt-oss-120b:free",
+                    "messages": [
+                        {"role": "system", "content": "You are a professional translator. You only output valid JSON. Always preserve original IDs."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": 0.1
+                }
+            )
+            
+            if response.status_code != 200:
+                logger.error(f"OpenRouter Batch Error: {response.status_code}, {response.text}")
+                return []
+                
+            data = response.json()
+            content = data["choices"][0]["message"]["content"]
+            
+            # Extract JSON
+            json_match = re.search(r'\{.*\}', content, re.DOTALL)
+            if json_match:
+                parsed = json.loads(json_match.group())
+                return parsed.get("translations", [])
+            else:
+                parsed = json.loads(content.strip())
+                return parsed.get("translations", [])
+                
+    except Exception as e:
+        logger.error(f"Batch translation request error: {str(e)}")
+        return []
+
 async def translate(text, from_lang, to_lang, domain):
     try:
         # Exclusively use OpenRouter LLM
