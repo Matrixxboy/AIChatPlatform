@@ -1,114 +1,121 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from database import sessions_collection, messages_collection, users_collection
-from models import SessionBase, SessionResponse, MessageResponse
+from database import sessions_collection, messages_collection, users_collection, user_sessions_collection
 from routes.users import get_current_user_id
 from bson import ObjectId
 from datetime import datetime
-from typing import List
+from fastapi import APIRouter, Depends, HTTPException, status
 from services.translation import translate
 import logging
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter()
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_session(session_data: dict, current_user_id: str = Depends(get_current_user_id)):
-    name = session_data.get("name")
     participant_ids = session_data.get("participantIds", [])
     
     # Ensure current user is in participants
-    participants = list(set(participant_ids + [current_user_id]))
+    participants = list(set([str(p) for p in participant_ids] + [str(current_user_id)]))
     
-    # Check for existing 1-on-1 session
-    if len(participants) == 2:
-        existing = await sessions_collection.find_one({
-            "participants": {"$all": participants, "$size": 2}
-        })
-        if existing:
-            # Unhide for the current user
-            await sessions_collection.update_one(
-                {"_id": existing["_id"]},
-                {"$pull": {"hiddenFor": current_user_id}}
-            )
-            existing["_id"] = str(existing["_id"])
-            return existing
+    if len(participants) != 2:
+        raise HTTPException(status_code=400, detail="Only 1-on-1 sessions are supported in this architecture currently")
 
-    session_dict = {
-        "name": name,
+    # 1. Find or create Global Session
+    global_session = await sessions_collection.find_one({
+        "participants": {"$all": participants, "$size": 2}
+    })
+    
+    if not global_session:
+        global_session_dict = {
+            "participants": participants,
+            "createdBy": current_user_id,
+            "createdAt": datetime.utcnow(),
+            "lastMessage": "",
+            "lastMessageTime": datetime.utcnow()
+        }
+        res = await sessions_collection.insert_one(global_session_dict)
+        global_session = global_session_dict
+        global_session["_id"] = res.inserted_id
+
+    global_session_id = str(global_session["_id"])
+
+    # 2. Ensure BOTH users have an individual UserSession reference - fulfilling "Store chat data individually"
+    for p_id in participants:
+        other_id = next((pid for pid in participants if pid != p_id), None)
+        await user_sessions_collection.update_one(
+            {"userId": p_id, "sessionId": global_session_id},
+            {
+                "$set": {
+                    "otherParticipantId": other_id,
+                    "isDeleted": False,
+                    "updatedAt": datetime.utcnow()
+                },
+                "$setOnInsert": {
+                    "createdAt": datetime.utcnow(),
+                    "deletedAt": datetime(1970, 1, 1)
+                }
+            },
+            upsert=True
+        )
+
+    # Return the user's view of the session
+    return {
+        "_id": global_session_id,
         "participants": participants,
-        "createdBy": current_user_id,
-        "lastMessage": "",
-        "lastMessageTime": datetime.utcnow(),
-        "createdAt": datetime.utcnow(),
-        "hiddenFor": []
+        "name": session_data.get("name") # Temporary, will be dynamic in get_sessions
     }
-    
-    result = await sessions_collection.insert_one(session_dict)
-    session_dict["_id"] = str(result.inserted_id)
-    
-    return session_dict
 
 @router.get("")
 async def get_sessions(current_user_id: str = Depends(get_current_user_id)):
-    # Filter sessions where user is a participant AND has not hidden the session
-    # We check for both string and ObjectId to be safe in live environments
-    cursor = sessions_collection.find({
-        "$or": [
-            {"participants": current_user_id},
-            {"participants": ObjectId(current_user_id) if ObjectId.is_valid(current_user_id) else None}
-        ],
-        "hiddenFor": {"$ne": current_user_id}
-    }).sort("lastMessageTime", -1)
+    # Fetch from user_sessions - fulfilling "independent chat storage/reference"
+    cursor = user_sessions_collection.find({
+        "userId": current_user_id,
+        "isDeleted": False
+    }).sort("updatedAt", -1)
     
     sessions = []
-    async for session in cursor:
-        session["_id"] = str(session["_id"])
+    async for user_sess in cursor:
+        sess_id = user_sess["sessionId"]
+        other_user_id = user_sess["otherParticipantId"]
         
-        # WhatsApp-style dynamic naming: Use the other participant's name for 1-on-1 chats
-        participants = session.get("participants", [])
-        if len(participants) == 2:
-            # Ensure we compare as strings to avoid ObjectId vs String mismatches
-            other_user_id = next((p for p in participants if str(p) != str(current_user_id)), None)
-            if other_user_id:
-                other_user = await users_collection.find_one({"_id": ObjectId(other_user_id)})
-                if other_user:
-                    session["name"] = other_user.get("name")
-                    session["otherUser"] = {
-                        "_id": str(other_user["_id"]),
-                        "name": other_user.get("name"),
-                        "username": other_user.get("username"),
-                        "bio": other_user.get("bio", ""),
-                        "profileImage": other_user.get("profileImage", "")
-                    }
+        # Get actual session details for last message
+        global_sess = await sessions_collection.find_one({"_id": ObjectId(sess_id)})
+        if not global_sess: continue
         
-        sessions.append(session)
+        # Get other user details for UI
+        other_user = await users_collection.find_one({"_id": ObjectId(other_user_id)})
+        
+        sessions.append({
+            "_id": sess_id,
+            "name": other_user.get("name") if other_user else "Unknown User",
+            "lastMessage": global_sess.get("lastMessage"),
+            "lastMessageTime": global_sess.get("lastMessageTime"),
+            "otherUser": {
+                "_id": other_user_id,
+                "name": other_user.get("name") if other_user else "Unknown",
+                "profileImage": other_user.get("profileImage") if other_user else ""
+            }
+        })
     
     return sessions
 
 @router.get("/{session_id}/messages")
 async def get_messages(session_id: str, current_user_id: str = Depends(get_current_user_id)):
-    # Verify participation (check both string and ObjectId formats)
-    session = await sessions_collection.find_one({
-        "_id": ObjectId(session_id),
-        "$or": [
-            {"participants": current_user_id},
-            {"participants": ObjectId(current_user_id) if ObjectId.is_valid(current_user_id) else None}
-        ]
+    # 1. Get the user's specific reference to this session
+    user_sess = await user_sessions_collection.find_one({
+        "userId": current_user_id,
+        "sessionId": session_id
     })
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
     
-    # Search messages by sessionId
-    # We only show messages created AFTER the user's last 'delete' action for this session - fulfilling "individual storage"
-    user_session_info = next((p for p in session.get("deletedBy", []) if p["userId"] == current_user_id), None)
-    delete_timestamp = user_session_info["at"] if user_session_info else datetime(1970, 1, 1)
+    # If no reference, user has no access - fulfilling "independent ownership"
+    if not user_sess or user_sess.get("isDeleted"):
+        # We don't raise 404 here to allow "empty" view if they just deleted it but session exists
+        delete_timestamp = datetime.utcnow() # Treat as fully deleted
+    else:
+        delete_timestamp = user_sess.get("deletedAt", datetime(1970, 1, 1))
 
+    # 2. Fetch messages created AFTER the user's individual delete timestamp
     cursor = messages_collection.find({
-        "$or": [
-            {"sessionId": session_id},
-            {"sessionId": ObjectId(session_id) if ObjectId.is_valid(session_id) else None}
-        ],
+        "sessionId": session_id,
         "createdAt": {"$gt": delete_timestamp}
     }).sort("createdAt", 1)
     
@@ -120,25 +127,14 @@ async def get_messages(session_id: str, current_user_id: str = Depends(get_curre
     async for msg in cursor:
         msg_id = str(msg["_id"])
         msg["_id"] = msg_id
-        # Ensure all IDs are strings for the frontend
-        if "senderId" in msg:
-            msg["senderId"] = str(msg["senderId"])
-        if "sessionId" in msg:
-            msg["sessionId"] = str(msg["sessionId"])
+        msg["senderId"] = str(msg["senderId"])
+        msg["sessionId"] = str(msg["sessionId"])
         
-        # Ensure status field exists
-        if "status" not in msg:
-            msg["status"] = "sent"
-            
-        # Use shared translations from the message document for efficiency - fulfilling "Optimize translation costs"
-        # We also still check the user document for any private translations if they exist (migration path)
+        # Merge translations (shared + private cache)
         shared_translations = msg.get("translations", {})
         user_specific_translations = user_translations.get(msg_id, {})
-        
-        # Merge them (User specific takes precedence if exists, though they should be identical)
         msg["translations"] = {**shared_translations, **user_specific_translations}
         
-        # Also include the original language if it's the sender's own message
         if str(msg.get("senderId")) == str(current_user_id):
             msg["translations"][msg.get("fromLang", "English")] = msg.get("originalText")
 
@@ -311,31 +307,32 @@ async def translate_all_messages(session_id: str, data: dict, current_user_id: s
 
 @router.delete("/{session_id}")
 async def delete_session(session_id: str, current_user_id: str = Depends(get_current_user_id)):
-    # Individual Delete Logic - fulfilling "deleted from user1, stays in user2"
-    # 1. Update session to record when this user deleted it
+    # Individual Delete Logic - fulfilling "independent chat storage/reference"
+    # We mark the UserSession as deleted for THIS user specifically
     now = datetime.utcnow()
-    await sessions_collection.update_one(
-        {"_id": ObjectId(session_id)},
+    await user_sessions_collection.update_one(
+        {"userId": current_user_id, "sessionId": session_id},
         {
-            "$addToSet": {"hiddenFor": current_user_id},
-            "$push": {"deletedBy": {"userId": current_user_id, "at": now}}
+            "$set": {
+                "isDeleted": True,
+                "deletedAt": now,
+                "updatedAt": now
+            }
         }
     )
     
-    # 2. Clear this user's personal translations for this session to save space and truly "delete" data
-    # We find all message IDs for this session
+    # 2. Clear this user's personal translations for this session
     messages_cursor = messages_collection.find({"sessionId": session_id})
     message_ids = []
     async for m in messages_cursor:
         message_ids.append(str(m["_id"]))
         
     if message_ids:
-        # Remove these keys from the user's translations map
         unset_map = {f"translations.{m_id}": "" for m_id in message_ids}
         await users_collection.update_one(
             {"_id": ObjectId(current_user_id)},
             {"$unset": unset_map}
         )
         
-    return {"message": "Chat history cleared for you. It remains available for other participants."}
+    return {"message": "Chat removed from your dashboard. Other participants still have access to their copies."}
 

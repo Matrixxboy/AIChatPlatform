@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import socketio
 from config import settings
 from routes import auth, users, sessions
-from database import messages_collection, sessions_collection
+from database import messages_collection, sessions_collection, user_sessions_collection
 from services.translation import translate
 from utils.auth import decode_token
 from datetime import datetime
@@ -178,17 +178,31 @@ async def send_message(sid, data):
         except Exception as trans_err:
             logger.error(f"Server-side translation failed: {trans_err}")
 
-        # 3. Update Session
+        # 3. Update Session and User-Specific References - fulfilling "independent ownership"
         await sessions_collection.update_one(
             {"_id": ObjectId(session_id)},
             {
                 "$set": {
                     "lastMessage": text,
-                    "lastMessageTime": new_message["createdAt"],
-                    "hiddenFor": []
+                    "lastMessageTime": new_message["createdAt"]
                 }
             }
         )
+        
+        # Ensure all participants have an ACTIVE user_session reference
+        if session_doc:
+            for p_id_raw in session_doc.get("participants", []):
+                p_id_str = str(p_id_raw)
+                await user_sessions_collection.update_one(
+                    {"userId": p_id_str, "sessionId": str(session_id)},
+                    {
+                        "$set": {
+                            "isDeleted": False, # Re-activate for everyone on new message
+                            "updatedAt": datetime.utcnow()
+                        }
+                    },
+                    upsert=True
+                )
         
         # 4. Prepare for Emit
         new_message["createdAt"] = new_message["createdAt"].isoformat()
