@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 function ChatRoom({ user, onUserUpdate, socket }) {
   const { sessionId } = useParams();
   const navigate = useNavigate();
+  const fileInputRef = useRef(null);
   const [messages, setMessages] = useState(() => {
     const cached = localStorage.getItem(`cached_messages_${sessionId}`);
     return cached ? JSON.parse(cached) : [];
@@ -20,6 +21,13 @@ function ChatRoom({ user, onUserUpdate, socket }) {
   const [translationTargetLang, setTranslationTargetLang] = useState(myLang);
   const [isProcessingTranslation, setIsProcessingTranslation] = useState(false);
   const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
+  const [attachedFile, setAttachedFile] = useState(null); // { name, url, type }
+  const [notification, setNotification] = useState({ show: false, message: '', type: 'info' });
+
+  const showToast = (message, type = 'info') => {
+    setNotification({ show: true, message, type });
+    setTimeout(() => setNotification(prev => ({ ...prev, show: false })), 4000);
+  };
 
   const [isRecording, setIsRecording] = useState(false);
   useEffect(() => {
@@ -205,6 +213,7 @@ function ChatRoom({ user, onUserUpdate, socket }) {
       setSession(current);
     } catch (err) {
       console.error('Failed to fetch session details');
+      showToast('Could not load session details', 'error');
     }
   };
 
@@ -221,6 +230,7 @@ function ChatRoom({ user, onUserUpdate, socket }) {
       localStorage.setItem(`cached_messages_${sessionId}`, JSON.stringify(messagesData));
     } catch (err) {
       console.error('Failed to fetch messages');
+      showToast('Could not load message history', 'error');
     } finally {
       setIsFetchingMessages(false);
     }
@@ -254,6 +264,10 @@ function ChatRoom({ user, onUserUpdate, socket }) {
       originalText: inputText,
       fromLang: myLang,
       targetLang: myLang,
+      messageType: attachedFile ? 'file' : 'text',
+      fileUrl: attachedFile?.url,
+      fileName: attachedFile?.name,
+      fileSize: attachedFile?.size,
       createdAt: new Date().toISOString(),
       isOptimistic: true
     };
@@ -262,13 +276,68 @@ function ChatRoom({ user, onUserUpdate, socket }) {
     
     socket.emit('send_message', {
       sessionId,
-      userId: user.id, // Fallback for multi-worker environments
+      userId: user.id,
       text: inputText,
       fromLang: myLang,
-      domain
+      domain,
+      messageType: attachedFile ? 'file' : 'text',
+      fileUrl: attachedFile?.url,
+      fileName: attachedFile?.name,
+      fileSize: attachedFile?.size
     });
 
     setInputText('');
+    setAttachedFile(null); // Clear attachment
+  };
+
+  const formatFileSize = (bytes) => {
+    if (!bytes) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const handleFileSelect = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Check size - fulfilling "refuse when some on try to upload more than 10mb"
+    const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+    if (file.size > MAX_SIZE) {
+      showToast(`File is too large (${formatFileSize(file.size)}). Max limit is 10MB.`, 'warning');
+      e.target.value = '';
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      setIsFetchingMessages(true);
+      const token = localStorage.getItem('token');
+      const res = await axios.post(`${import.meta.env.VITE_API_URL}/api/upload`, formData, {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      setAttachedFile({
+        name: file.name,
+        url: res.data.url,
+        type: file.type,
+        size: res.data.size
+      });
+      
+      e.target.value = ''; // Reset input
+    } catch (err) {
+      console.error('File upload failed:', err);
+      const errorMsg = err.response?.data?.detail || 'Failed to upload file';
+      showToast(errorMsg, 'error');
+    } finally {
+      setIsFetchingMessages(false);
+    }
   };
 
   const toggleRecording = () => {
@@ -277,12 +346,11 @@ function ChatRoom({ user, onUserUpdate, socket }) {
       setIsRecording(false);
     } else {
       if (!window.isSecureContext && window.location.hostname !== 'localhost') {
-        alert('Microphone access is restricted on non-secure connections (HTTP). Please use HTTPS or enable "Insecure origins treated as secure" in your browser flags.');
-        console.warn('To enable mic on this IP, go to: chrome://flags/#unsafely-treat-insecure-origin-as-secure and add ' + window.location.origin + ' to the list.');
+        showToast('Microphone access requires HTTPS', 'warning');
         return;
       }
       if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
-        alert('Speech recognition not supported in this browser.');
+        showToast('Speech recognition not supported in this browser', 'error');
         return;
       }
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -561,8 +629,56 @@ function ChatRoom({ user, onUserUpdate, socket }) {
 
       {/* Input Bar */}
       <footer className="p-3 bg-[#f0f2f5] border-t border-slate-200/60 z-30 relative">
-        <form onSubmit={handleSendMessage} className="max-w-4xl mx-auto flex items-center gap-3">
-          <div className="flex gap-1">
+        <div className="max-w-4xl mx-auto">
+          {/* Attachment Preview - fulfilling "make preview in the chat" */}
+          <AnimatePresence>
+            {attachedFile && (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="mb-3 p-3 bg-white rounded-xl shadow-lg border border-brand/20 flex items-center gap-4 group"
+              >
+                <div className="w-12 h-12 bg-brand/10 rounded-lg flex items-center justify-center overflow-hidden">
+                  {attachedFile.type.startsWith('image/') ? (
+                    <img src={`${import.meta.env.VITE_API_URL}${attachedFile.url}`} alt="Preview" className="w-full h-full object-cover" />
+                  ) : (
+                    <Globe2 className="w-6 h-6 text-brand" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-slate-800 truncate">{attachedFile.name}</p>
+                  <p className="text-[11px] text-brand uppercase font-bold tracking-wider">
+                    {formatFileSize(attachedFile.size)} • Ready to send
+                  </p>
+                </div>
+                <button 
+                  onClick={() => setAttachedFile(null)}
+                  className="p-2 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-full transition-all"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <form onSubmit={handleSendMessage} className="flex items-center gap-3">
+            <div className="flex gap-1">
+            {/* Hidden File Input */}
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              className="hidden" 
+              onChange={handleFileSelect}
+            />
+            <button 
+              type="button"
+              onClick={() => fileInputRef.current.click()}
+              className="p-2.5 text-slate-500 hover:bg-slate-200/50 rounded-full transition-all"
+              title="Send a file"
+            >
+              <Plus className="w-6 h-6" />
+            </button>
             <button type="button" className="p-2.5 hover:bg-slate-200/50 rounded-full text-slate-500 transition-all">
               <Sparkles className="w-6 h-6" />
             </button>
@@ -597,7 +713,33 @@ function ChatRoom({ user, onUserUpdate, socket }) {
             <Send className="w-5 h-5 ml-0.5" />
           </button>
         </form>
+        </div>
       </footer>
+
+      {/* Modern Responsive Toast Notification */}
+      <AnimatePresence>
+        {notification.show && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border min-w-[300px]"
+            style={{
+              backgroundColor: notification.type === 'error' ? '#fef2f2' : notification.type === 'warning' ? '#fffbeb' : '#f0f9ff',
+              borderColor: notification.type === 'error' ? '#fee2e2' : notification.type === 'warning' ? '#fef3c7' : '#e0f2fe',
+              color: notification.type === 'error' ? '#991b1b' : notification.type === 'warning' ? '#92400e' : '#075985',
+            }}
+          >
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+              notification.type === 'error' ? 'bg-red-100' : notification.type === 'warning' ? 'bg-amber-100' : 'bg-sky-100'
+            }`}>
+              {notification.type === 'error' ? <X className="w-4 h-4" /> : <Globe2 className="w-4 h-4" />}
+            </div>
+            <p className="text-sm font-bold">{notification.message}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
@@ -605,6 +747,14 @@ function ChatRoom({ user, onUserUpdate, socket }) {
 const MessageBubble = ({ msg, isOwn, myLang, domain }) => {
   const [displayText, setDisplayText] = useState(msg.originalText || msg.text);
   const [isTranslating, setIsTranslating] = useState(false);
+
+  const formatFileSize = (bytes) => {
+    if (!bytes) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
 
   useEffect(() => {
     // Show translation if available for the user's current preferred language
@@ -653,6 +803,46 @@ const MessageBubble = ({ msg, isOwn, myLang, domain }) => {
                   return part;
                 })}
               </div>
+              
+              {/* File Attachment Rendering - fulfilling "preview in the chat" */}
+              {msg.messageType === 'file' && (
+                <div className="mt-2 flex flex-col gap-2">
+                  {/* Image Preview */}
+                  {msg.fileUrl && (msg.fileUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i) || (msg.fileName && msg.fileName.match(/\.(jpg|jpeg|png|gif|webp)$/i))) ? (
+                    <div className="rounded-lg overflow-hidden border border-black/5 shadow-sm max-h-64">
+                       <img 
+                        src={`${import.meta.env.VITE_API_URL}${msg.fileUrl}`} 
+                        alt="Shared image" 
+                        className="w-full h-full object-cover cursor-pointer hover:opacity-95 transition-opacity"
+                        onClick={() => window.open(`${import.meta.env.VITE_API_URL}${msg.fileUrl}`, '_blank')}
+                      />
+                    </div>
+                  ) : null}
+                  
+                  {/* File Download Card */}
+                  <a 
+                    href={`${import.meta.env.VITE_API_URL}${msg.fileUrl}`} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="p-3 bg-black/5 rounded-lg border border-black/5 flex items-center gap-3 hover:bg-black/10 transition-all group"
+                  >
+                    <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                      {msg.fileUrl?.endsWith('.pdf') ? (
+                        <Globe2 className="w-5 h-5 text-red-500" /> // Using Globe2 as surrogate for PDF icon
+                      ) : (
+                        <Plus className="w-5 h-5 text-brand rotate-45" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-slate-800 truncate">{msg.fileName}</p>
+                      <p className="text-[11px] text-slate-500 uppercase font-bold">
+                        {msg.fileSize ? formatFileSize(msg.fileSize) : 'Download File'}
+                      </p>
+                    </div>
+                    <Send className="w-4 h-4 text-brand rotate-90 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </a>
+                </div>
+              )}
               
               {/* Basic Link Preview */}
               {displayText.match(/https?:\/\/[^\s]+/) && (

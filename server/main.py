@@ -3,7 +3,7 @@ from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 import socketio
 from config import settings
-from routes import auth, users, sessions
+from routes import auth, users, sessions, upload
 from database import messages_collection, sessions_collection, user_sessions_collection
 from services.translation import translate
 from utils.auth import decode_token
@@ -11,8 +11,8 @@ from datetime import datetime
 from bson import ObjectId
 import logging
 import time
-from fastapi import Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+import os
 
 # Setup Logging
 logging.basicConfig(level=logging.INFO)
@@ -56,6 +56,12 @@ async def global_exception_handler(request: Request, exc: Exception):
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(users.router, prefix="/api/users", tags=["users"])
 app.include_router(sessions.router, prefix="/api/sessions", tags=["sessions"])
+app.include_router(upload.router, prefix="/api/upload", tags=["upload"])
+
+# Static Files - Serving the public/uploads directory
+if not os.path.exists("public/uploads"):
+    os.makedirs("public/uploads")
+app.mount("/uploads", StaticFiles(directory="public/uploads"), name="uploads")
 
 # Socket.io Setup
 sio = socketio.AsyncServer(
@@ -128,6 +134,9 @@ async def send_message(sid, data):
             "originalText": text,
             "fromLang": from_lang,
             "domain": domain,
+            "messageType": data.get("messageType", "text"),
+            "fileUrl": data.get("fileUrl"),
+            "fileName": data.get("fileName"),
             "status": "sent",
             "createdAt": datetime.utcnow()
         }
