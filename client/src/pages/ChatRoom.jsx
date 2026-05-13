@@ -478,14 +478,14 @@ function ChatRoom({ user, onUserUpdate, socket }) {
           </div>
           
           <div className="flex items-center gap-1 text-slate-500">
-             <button 
+             {/* <button 
                 onClick={() => setIsTranslationModalOpen(true)}
                 className="p-2 rounded-full transition-all flex items-center gap-2 px-3 hover:bg-slate-200/50 text-brand font-bold"
                 title="Translate Entire Conversation"
              >
                 <Globe2 className="w-5 h-5" />
                 <span className="text-xs hidden sm:inline">Translate History</span>
-             </button>
+             </button> */}
              <button className="p-2 hover:bg-slate-200/50 rounded-full transition-all"><Search className="w-5 h-5" /></button>
              <div className="relative">
                 <button 

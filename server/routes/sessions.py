@@ -99,12 +99,17 @@ async def get_messages(session_id: str, current_user_id: str = Depends(get_curre
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
-    # Search messages by sessionId (handle both string and ObjectId if necessary)
+    # Search messages by sessionId
+    # We only show messages created AFTER the user's last 'delete' action for this session - fulfilling "individual storage"
+    user_session_info = next((p for p in session.get("deletedBy", []) if p["userId"] == current_user_id), None)
+    delete_timestamp = user_session_info["at"] if user_session_info else datetime(1970, 1, 1)
+
     cursor = messages_collection.find({
         "$or": [
             {"sessionId": session_id},
             {"sessionId": ObjectId(session_id) if ObjectId.is_valid(session_id) else None}
-        ]
+        ],
+        "createdAt": {"$gt": delete_timestamp}
     }).sort("createdAt", 1)
     
     # Get current user's translations to merge
@@ -306,14 +311,31 @@ async def translate_all_messages(session_id: str, data: dict, current_user_id: s
 
 @router.delete("/{session_id}")
 async def delete_session(session_id: str, current_user_id: str = Depends(get_current_user_id)):
-    # Instead of deleting, we add the user to 'hiddenFor' array
-    result = await sessions_collection.update_one(
+    # Individual Delete Logic - fulfilling "deleted from user1, stays in user2"
+    # 1. Update session to record when this user deleted it
+    now = datetime.utcnow()
+    await sessions_collection.update_one(
         {"_id": ObjectId(session_id)},
-        {"$addToSet": {"hiddenFor": current_user_id}}
+        {
+            "$addToSet": {"hiddenFor": current_user_id},
+            "$push": {"deletedBy": {"userId": current_user_id, "at": now}}
+        }
     )
     
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Session not found")
+    # 2. Clear this user's personal translations for this session to save space and truly "delete" data
+    # We find all message IDs for this session
+    messages_cursor = messages_collection.find({"sessionId": session_id})
+    message_ids = []
+    async for m in messages_cursor:
+        message_ids.append(str(m["_id"]))
         
-    return {"message": "Chat deleted successfully for you"}
+    if message_ids:
+        # Remove these keys from the user's translations map
+        unset_map = {f"translations.{m_id}": "" for m_id in message_ids}
+        await users_collection.update_one(
+            {"_id": ObjectId(current_user_id)},
+            {"$unset": unset_map}
+        )
+        
+    return {"message": "Chat history cleared for you. It remains available for other participants."}
 
