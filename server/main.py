@@ -1,5 +1,6 @@
 import uvicorn
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Request, Response, Depends
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import socketio
 from config import settings
@@ -24,9 +25,7 @@ app = FastAPI(title="Biz Insights Multilingual Translator API", strict_slashes=F
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "*"
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -61,7 +60,9 @@ app.include_router(upload.router, prefix="/api/upload", tags=["upload"])
 # Static Files - Serving the public/uploads directory
 if not os.path.exists("public/uploads"):
     os.makedirs("public/uploads")
-app.mount("/uploads", StaticFiles(directory="public/uploads"), name="uploads")
+# We mount both with and without prefix to ensure local and live compatibility
+app.mount("/ai-chat-platform/public/uploads", StaticFiles(directory="public/uploads"), name="uploads_prefixed")
+app.mount("/public/uploads", StaticFiles(directory="public/uploads"), name="uploads")
 
 # Socket.io Setup
 sio = socketio.AsyncServer(
@@ -202,12 +203,20 @@ async def send_message(sid, data):
         if session_doc:
             for p_id_raw in session_doc.get("participants", []):
                 p_id_str = str(p_id_raw)
+                # Determine who the 'other' person is for this specific participant
+                other_p_id = next((str(x) for x in session_doc["participants"] if str(x) != p_id_str), p_id_str)
+                
                 await user_sessions_collection.update_one(
                     {"userId": p_id_str, "sessionId": str(session_id)},
                     {
                         "$set": {
                             "isDeleted": False, # Re-activate for everyone on new message
+                            "otherParticipantId": other_p_id,
                             "updatedAt": datetime.utcnow()
+                        },
+                        "$setOnInsert": {
+                            "createdAt": datetime.utcnow(),
+                            "deletedAt": datetime(1970, 1, 1)
                         }
                     },
                     upsert=True

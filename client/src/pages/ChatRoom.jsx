@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import io from 'socket.io-client';
 import axios from 'axios';
-import { Search, Plus, MessageSquare, Mic, Send, ArrowLeft, Globe, Sparkles, LogOut, X, Phone, Video, MoreVertical, MoreHorizontal, Globe2, Check, CheckCheck, Trash2 } from 'lucide-react';
+import { Search, Plus, MessageSquare, Mic, Send, ArrowLeft, Globe, Sparkles, LogOut, X, Phone, Video, MoreVertical, MoreHorizontal, Globe2, Check, CheckCheck, Trash2, FileText, FileImage, File, FileVideo, FileAudio, Download, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import chatBg from '../assets/chat-bg.png';
 
 function ChatRoom({ user, onUserUpdate, socket }) {
   const { sessionId } = useParams();
@@ -290,6 +291,15 @@ function ChatRoom({ user, onUserUpdate, socket }) {
     setAttachedFile(null); // Clear attachment
   };
 
+  const getFileIcon = (filename, type) => {
+    const name = filename?.toLowerCase() || '';
+    if (name.endsWith('.pdf')) return <FileText className="w-6 h-6 text-red-500" />;
+    if (name.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i)) return <FileImage className="w-6 h-6 text-blue-500" />;
+    if (name.match(/\.(mp4|mov|avi|wmv)$/i)) return <FileVideo className="w-6 h-6 text-purple-500" />;
+    if (name.match(/\.(mp3|wav|ogg)$/i)) return <FileAudio className="w-6 h-6 text-emerald-500" />;
+    return <File className="w-6 h-6 text-slate-500" />;
+  };
+
   const formatFileSize = (bytes) => {
     if (!bytes) return '0 Bytes';
     const k = 1024;
@@ -426,8 +436,15 @@ function ChatRoom({ user, onUserUpdate, socket }) {
         )}
       </AnimatePresence>
 
-      {/* WhatsApp Doodle Pattern Background */}
-      <div className="absolute inset-0 opacity-[0.06] pointer-events-none z-0" style={{ backgroundImage: 'url("https://w0.peakpx.com/wallpaper/580/650/wallpaper-whatsapp-doodle-patterns-chat-background-texture.jpg")', backgroundSize: '400px' }}></div>
+      {/* Custom Generated Subtle Doodle Pattern Background */}
+      <div 
+        className="absolute inset-0 opacity-[0.05] pointer-events-none z-0" 
+        style={{ 
+          backgroundImage: `url("${chatBg}")`, 
+          backgroundSize: '500px', 
+          backgroundRepeat: 'repeat' 
+        }}
+      ></div>
 
       {/* Other Participant Profile (Slides in from right) */}
       <AnimatePresence>
@@ -641,9 +658,15 @@ function ChatRoom({ user, onUserUpdate, socket }) {
               >
                 <div className="w-12 h-12 bg-brand/10 rounded-lg flex items-center justify-center overflow-hidden">
                   {attachedFile.type.startsWith('image/') ? (
-                    <img src={`${import.meta.env.VITE_API_URL}${attachedFile.url}`} alt="Preview" className="w-full h-full object-cover" />
+                    <img 
+                      src={attachedFile.url.startsWith('http') || attachedFile.url.startsWith('/ai-chat-platform') 
+                        ? attachedFile.url 
+                        : `${import.meta.env.VITE_API_URL}${attachedFile.url}`} 
+                      alt="Preview" 
+                      className="w-full h-full object-cover" 
+                    />
                   ) : (
-                    <Globe2 className="w-6 h-6 text-brand" />
+                    getFileIcon(attachedFile.name, attachedFile.type)
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -756,6 +779,38 @@ const MessageBubble = ({ msg, isOwn, myLang, domain }) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
+  const handleDownload = async (fileUrl, fileName) => {
+    try {
+      const url = fileUrl.startsWith('http') || fileUrl.startsWith('/ai-chat-platform') 
+        ? fileUrl 
+        : `${import.meta.env.VITE_API_URL}${fileUrl}`;
+      
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = fileName || 'download';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error('Download failed:', error);
+      window.open(fileUrl, '_blank');
+    }
+  };
+
+  const getFileIcon = (filename, type) => {
+    const name = filename?.toLowerCase() || '';
+    if (name.endsWith('.pdf')) return <FileText className="w-5 h-5 text-red-500" />;
+    if (name.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i)) return <FileImage className="w-5 h-5 text-blue-500" />;
+    if (name.match(/\.(mp4|mov|avi|wmv)$/i)) return <FileVideo className="w-5 h-5 text-purple-500" />;
+    if (name.match(/\.(mp3|wav|ogg)$/i)) return <FileAudio className="w-5 h-5 text-emerald-500" />;
+    return <File className="w-5 h-5 text-slate-500" />;
+  };
+
   useEffect(() => {
     // Show translation if available for the user's current preferred language
     if (msg.translations && msg.translations[myLang]) {
@@ -802,52 +857,74 @@ const MessageBubble = ({ msg, isOwn, myLang, domain }) => {
                   }
                   return part;
                 })}
-              </div>
-              
-              {/* File Attachment Rendering - fulfilling "preview in the chat" */}
-              {msg.messageType === 'file' && (
-                <div className="mt-2 flex flex-col gap-2">
-                  {/* Image Preview */}
-                  {msg.fileUrl && (msg.fileUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i) || (msg.fileName && msg.fileName.match(/\.(jpg|jpeg|png|gif|webp)$/i))) ? (
-                    <div className="rounded-lg overflow-hidden border border-black/5 shadow-sm max-h-64">
-                       <img 
-                        src={`${import.meta.env.VITE_API_URL}${msg.fileUrl}`} 
-                        alt="Shared image" 
-                        className="w-full h-full object-cover cursor-pointer hover:opacity-95 transition-opacity"
-                        onClick={() => window.open(`${import.meta.env.VITE_API_URL}${msg.fileUrl}`, '_blank')}
-                      />
+              </div>              {/* File Attachment Rendering - fulfilling "preview in the chat" */}
+              {msg.messageType === 'file' && msg.fileUrl && (
+                <div className="mt-2 mb-1">
+                  {msg.fileName?.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
+                      <div className="relative group/img bg-black/5 rounded-lg overflow-hidden border border-black/5 flex flex-col">
+                        <img 
+                          src={msg.fileUrl.startsWith('http') || msg.fileUrl.startsWith('/ai-chat-platform')
+                            ? msg.fileUrl 
+                            : `${import.meta.env.VITE_API_URL}${msg.fileUrl}`} 
+                          alt={msg.fileName} 
+                          className="max-w-full h-auto block cursor-pointer hover:opacity-95 transition-opacity"
+                          style={{ maxHeight: '300px' }}
+                          onClick={() => window.open(msg.fileUrl.startsWith('http') || msg.fileUrl.startsWith('/ai-chat-platform') ? msg.fileUrl : `${import.meta.env.VITE_API_URL}${msg.fileUrl}`, '_blank')}
+                        />
+                        <div className="flex border-t border-black/10">
+                          <button 
+                            onClick={() => window.open(msg.fileUrl.startsWith('http') || msg.fileUrl.startsWith('/ai-chat-platform') ? msg.fileUrl : `${import.meta.env.VITE_API_URL}${msg.fileUrl}`, '_blank')}
+                            className="flex-1 py-2.5 flex items-center justify-center gap-2 text-[12px] font-bold text-slate-600 hover:bg-black/5 transition-colors border-r border-black/10"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            VIEW FULL
+                          </button>
+                          <button 
+                            onClick={() => handleDownload(msg.fileUrl, msg.fileName)}
+                            className="flex-1 py-2.5 flex items-center justify-center gap-2 text-[12px] font-bold text-brand hover:bg-black/5 transition-colors"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            DOWNLOAD
+                          </button>
+                        </div>
+                      </div>
+                  ) : (
+                    <div className="bg-black/5 rounded-lg border border-black/5 overflow-hidden flex flex-col">
+                      <div className="p-3 flex items-center gap-3">
+                        <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                          {getFileIcon(msg.fileName)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-slate-800 truncate">{msg.fileName}</p>
+                          <p className="text-[11px] text-slate-500 uppercase font-bold">
+                            {msg.fileSize ? formatFileSize(msg.fileSize) : 'Document'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex border-t border-black/10">
+                        <button 
+                          onClick={() => window.open(msg.fileUrl.startsWith('http') || msg.fileUrl.startsWith('/ai-chat-platform') ? msg.fileUrl : `${import.meta.env.VITE_API_URL}${msg.fileUrl}`, '_blank')}
+                          className="flex-1 py-2.5 flex items-center justify-center gap-2 text-[12px] font-bold text-slate-600 hover:bg-black/5 transition-colors border-r border-black/10"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          VIEW
+                        </button>
+                        <button 
+                          onClick={() => handleDownload(msg.fileUrl, msg.fileName)}
+                          className="flex-1 py-2.5 flex items-center justify-center gap-2 text-[12px] font-bold text-brand hover:bg-black/5 transition-colors"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          DOWNLOAD
+                        </button>
+                      </div>
                     </div>
-                  ) : null}
-                  
-                  {/* File Download Card */}
-                  <a 
-                    href={`${import.meta.env.VITE_API_URL}${msg.fileUrl}`} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="p-3 bg-black/5 rounded-lg border border-black/5 flex items-center gap-3 hover:bg-black/10 transition-all group"
-                  >
-                    <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm">
-                      {msg.fileUrl?.endsWith('.pdf') ? (
-                        <Globe2 className="w-5 h-5 text-red-500" /> // Using Globe2 as surrogate for PDF icon
-                      ) : (
-                        <Plus className="w-5 h-5 text-brand rotate-45" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-slate-800 truncate">{msg.fileName}</p>
-                      <p className="text-[11px] text-slate-500 uppercase font-bold">
-                        {msg.fileSize ? formatFileSize(msg.fileSize) : 'Download File'}
-                      </p>
-                    </div>
-                    <Send className="w-4 h-4 text-brand rotate-90 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </a>
+                  )}
                 </div>
               )}
-              
+
               {/* Basic Link Preview */}
               {displayText.match(/https?:\/\/[^\s]+/) && (
                 <div className="mt-2 bg-black/5 rounded-lg overflow-hidden border border-black/5 flex flex-col pointer-events-auto">
-                   {/* We could fetch real metadata here, but for now we show a nice "Link" indicator */}
                    <div className="p-2 flex items-center gap-3">
                       <div className="w-10 h-10 bg-white rounded flex items-center justify-center shadow-sm">
                          <Globe className="w-5 h-5 text-blue-500" />
@@ -861,6 +938,7 @@ const MessageBubble = ({ msg, isOwn, myLang, domain }) => {
                    </div>
                 </div>
               )}
+
 
               <div className="flex items-center gap-1 opacity-60 ml-auto mt-1">
                 <span className="text-[10px] font-medium uppercase text-slate-500">

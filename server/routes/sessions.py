@@ -75,23 +75,29 @@ async def get_sessions(current_user_id: str = Depends(get_current_user_id)):
     sessions = []
     async for user_sess in cursor:
         sess_id = user_sess["sessionId"]
-        other_user_id = user_sess["otherParticipantId"]
+        # Fallback if otherParticipantId is missing - fulfilling "security and maintain both user"
+        other_user_id = user_sess.get("otherParticipantId")
         
-        # Get actual session details for last message
+        # Get actual session details
         global_sess = await sessions_collection.find_one({"_id": ObjectId(sess_id)})
         if not global_sess: continue
         
+        if not other_user_id:
+            other_user_id = next((p for p in global_sess.get("participants", []) if str(p) != str(current_user_id)), None)
+        
+        if not other_user_id: continue
+
         # Get other user details for UI
         other_user = await users_collection.find_one({"_id": ObjectId(other_user_id)})
         
         sessions.append({
             "_id": sess_id,
-            "name": other_user.get("name") if other_user else "Unknown User",
+            "name": other_user.get("fullName") or other_user.get("name") if other_user else "Unknown User",
             "lastMessage": global_sess.get("lastMessage"),
             "lastMessageTime": global_sess.get("lastMessageTime"),
             "otherUser": {
-                "_id": other_user_id,
-                "name": other_user.get("name") if other_user else "Unknown",
+                "_id": str(other_user_id),
+                "name": other_user.get("fullName") or other_user.get("name") if other_user else "Unknown",
                 "profileImage": other_user.get("profileImage") if other_user else ""
             }
         })

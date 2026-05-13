@@ -1,0 +1,875 @@
+
+<h2 class="sr-only">Cyber Crime Investigation Demo - Full Guide & Code Walkthrough</h2>
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-mono); }
+
+  .hero {
+    background: #0a0f1a;
+    border-radius: var(--border-radius-lg);
+    padding: 2rem;
+    margin-bottom: 1.5rem;
+    border: 0.5px solid #1e3a5f;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, #00ff88, #0099ff, #ff3366);
+  }
+  .hero-title {
+    font-size: 22px;
+    font-weight: 500;
+    color: #00ff88;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .hero-sub {
+    font-size: 13px;
+    color: #4a7fa5;
+    letter-spacing: 1px;
+  }
+  .blink {
+    display: inline-block;
+    width: 8px; height: 8px;
+    background: #00ff88;
+    border-radius: 50%;
+    margin-right: 8px;
+    animation: blink 1.2s infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.1} }
+
+  .nav {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+  }
+  .nav-btn {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 6px 14px;
+    border-radius: var(--border-radius-md);
+    border: 0.5px solid var(--color-border-secondary);
+    background: var(--color-background-secondary);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    transition: all 0.15s;
+  }
+  .nav-btn:hover { border-color: #00ff88; color: #00ff88; }
+  .nav-btn.active { border-color: #00ff88; color: #00ff88; background: rgba(0,255,136,0.05); }
+
+  .section { display: none; }
+  .section.active { display: block; }
+
+  .phase-card {
+    background: var(--color-background-primary);
+    border: 0.5px solid var(--color-border-tertiary);
+    border-radius: var(--border-radius-lg);
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+    position: relative;
+  }
+  .phase-num {
+    font-size: 11px;
+    color: #00ff88;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    font-family: var(--font-mono);
+  }
+  .phase-title {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--color-text-primary);
+    margin-bottom: 8px;
+  }
+  .phase-body {
+    font-size: 14px;
+    color: var(--color-text-secondary);
+    line-height: 1.6;
+  }
+  .phase-time {
+    position: absolute;
+    top: 1.25rem; right: 1.25rem;
+    font-size: 11px;
+    color: #ff6b6b;
+    font-family: var(--font-mono);
+    border: 0.5px solid #ff6b6b33;
+    padding: 2px 8px;
+    border-radius: 20px;
+  }
+
+  .todo-list {
+    list-style: none;
+    margin-top: 0.75rem;
+  }
+  .todo-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 0.5px solid var(--color-border-tertiary);
+    cursor: pointer;
+  }
+  .todo-item:last-child { border-bottom: none; }
+  .todo-check {
+    width: 18px; height: 18px;
+    border-radius: 4px;
+    border: 1.5px solid var(--color-border-secondary);
+    flex-shrink: 0;
+    margin-top: 1px;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  .todo-check.done {
+    background: #00ff88;
+    border-color: #00ff88;
+  }
+  .todo-check.done::after {
+    content: '✓';
+    font-size: 11px;
+    color: #000;
+    font-weight: 700;
+  }
+  .todo-text {
+    font-size: 14px;
+    color: var(--color-text-primary);
+    line-height: 1.5;
+  }
+  .todo-text.done { color: var(--color-text-tertiary); text-decoration: line-through; }
+
+  pre {
+    background: #0a0f1a;
+    border: 0.5px solid #1e3a5f;
+    border-radius: var(--border-radius-md);
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+    margin: 0.75rem 0;
+    position: relative;
+  }
+  code {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: #a8d8a8;
+    line-height: 1.7;
+  }
+  .kw { color: #ff79c6; }
+  .fn { color: #8be9fd; }
+  .st { color: #f1fa8c; }
+  .cm { color: #6272a4; font-style: italic; }
+  .num { color: #bd93f9; }
+  .var { color: #ffb86c; }
+
+  .copy-btn {
+    position: absolute;
+    top: 8px; right: 10px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    padding: 3px 10px;
+    border: 0.5px solid #1e3a5f;
+    border-radius: var(--border-radius-md);
+    background: transparent;
+    color: #4a7fa5;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .copy-btn:hover { color: #00ff88; border-color: #00ff88; }
+
+  .tag {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 20px;
+    margin-right: 6px;
+    font-family: var(--font-mono);
+    letter-spacing: 0.5px;
+  }
+  .tag-green { background: rgba(0,255,136,0.1); color: #00ff88; border: 0.5px solid rgba(0,255,136,0.3); }
+  .tag-red { background: rgba(255,107,107,0.1); color: #ff6b6b; border: 0.5px solid rgba(255,107,107,0.3); }
+  .tag-blue { background: rgba(0,153,255,0.1); color: #0099ff; border: 0.5px solid rgba(0,153,255,0.3); }
+  .tag-yellow { background: rgba(241,250,140,0.1); color: #f1fa8c; border: 0.5px solid rgba(241,250,140,0.3); }
+
+  .alert-box {
+    background: rgba(255,51,102,0.07);
+    border: 0.5px solid #ff336644;
+    border-left: 3px solid #ff3366;
+    border-radius: var(--border-radius-md);
+    padding: 12px 16px;
+    margin: 0.75rem 0;
+    font-size: 13px;
+    color: #ff6b6b;
+    font-family: var(--font-mono);
+  }
+  .tip-box {
+    background: rgba(0,255,136,0.05);
+    border: 0.5px solid rgba(0,255,136,0.2);
+    border-left: 3px solid #00ff88;
+    border-radius: var(--border-radius-md);
+    padding: 12px 16px;
+    margin: 0.75rem 0;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+  }
+  .tip-box strong { color: #00ff88; }
+
+  .progress-bar {
+    height: 4px;
+    background: var(--color-background-secondary);
+    border-radius: 2px;
+    margin: 0.5rem 0 1.25rem;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #00ff88, #0099ff);
+    border-radius: 2px;
+    transition: width 0.4s;
+  }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 500px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  .stat-card {
+    background: var(--color-background-secondary);
+    border-radius: var(--border-radius-md);
+    padding: 1rem;
+    text-align: center;
+  }
+  .stat-val { font-size: 28px; font-weight: 500; color: #00ff88; }
+  .stat-label { font-size: 12px; color: var(--color-text-secondary); margin-top: 4px; letter-spacing: 1px; text-transform: uppercase; }
+
+  .file-block {
+    background: #0a0f1a;
+    border: 0.5px solid #1e3a5f;
+    border-radius: var(--border-radius-md);
+    padding: 1rem 1.25rem;
+    margin: 0.75rem 0;
+  }
+  .file-header {
+    font-size: 11px;
+    color: #4a7fa5;
+    letter-spacing: 1px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .file-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  .score-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 0.5px solid #1e3a5f;
+  }
+  .score-row:last-child { border-bottom: none; }
+  .score-name { width: 60px; font-size: 13px; color: #8be9fd; }
+  .score-bar-bg { flex: 1; height: 8px; background: #1e3a5f; border-radius: 4px; }
+  .score-fill { height: 100%; border-radius: 4px; transition: width 0.5s; }
+  .score-num { width: 40px; text-align: right; font-size: 13px; color: #f1fa8c; }
+</style>
+
+<div class="hero">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+    <span class="blink"></span>
+    <span style="font-size:11px;color:#4a7fa5;letter-spacing:2px;text-transform:uppercase">system active</span>
+  </div>
+  <div class="hero-title">Cyber Crime Investigation</div>
+  <div class="hero-title" style="color:#0099ff;font-size:16px;margin-top:4px">Complete Build Guide + Code</div>
+  <div class="hero-sub" style="margin-top:12px">7 phases · ~40 minutes · full Streamlit + Python walkthrough</div>
+</div>
+
+<div class="nav">
+  <button class="nav-btn active" onclick="show('overview')">overview</button>
+  <button class="nav-btn" onclick="show('checklist')">checklist</button>
+  <button class="nav-btn" onclick="show('setup')">setup + csv</button>
+  <button class="nav-btn" onclick="show('code1')">app.py part 1</button>
+  <button class="nav-btn" onclick="show('code2')">app.py part 2</button>
+  <button class="nav-btn" onclick="show('code3')">app.py part 3</button>
+  <button class="nav-btn" onclick="show('teaching')">teaching guide</button>
+</div>
+
+<div id="overview" class="section active">
+  <div class="grid-2" style="margin-bottom:1.25rem">
+    <div class="stat-card"><div class="stat-val">7</div><div class="stat-label">phases</div></div>
+    <div class="stat-card"><div class="stat-val">40</div><div class="stat-label">minutes</div></div>
+    <div class="stat-card"><div class="stat-val">4</div><div class="stat-label">suspects</div></div>
+    <div class="stat-card"><div class="stat-val">1</div><div class="stat-label">criminal</div></div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-num">phase 01</div>
+    <div class="phase-title">Story Intro</div>
+    <div class="phase-time">3 min</div>
+    <div class="phase-body">Open with drama: "Last night, confidential company data was leaked." Hook students before any code is shown. Ask them: "Can data reveal the criminal?"</div>
+  </div>
+  <div class="phase-card">
+    <div class="phase-num">phase 02</div>
+    <div class="phase-title">Dataset Exploration</div>
+    <div class="phase-time">5 min</div>
+    <div class="phase-body">Show the raw employee_logs.csv table. Ask: "Who looks suspicious?" Let students guess BEFORE analysis. Creates investment.</div>
+  </div>
+  <div class="phase-card">
+    <div class="phase-num">phase 03</div>
+    <div class="phase-title">Data Cleaning</div>
+    <div class="phase-time">5 min</div>
+    <div class="phase-body">Explain rows, columns, features, df.describe(). Teach averages, max values, abnormal activity. Frame as "reading the suspect file."</div>
+  </div>
+  <div class="phase-card">
+    <div class="phase-num">phase 04</div>
+    <div class="phase-title">Visualization Magic</div>
+    <div class="phase-time">10 min</div>
+    <div class="phase-body">4 charts: Files Opened bar chart, Data Transfer spikes, Failed Logins, Heatmap. Students SEE anomalies visually. This is the WOW moment.</div>
+  </div>
+  <div class="phase-card">
+    <div class="phase-num">phase 05</div>
+    <div class="phase-title">Filtering Investigation</div>
+    <div class="phase-time">10 min</div>
+    <div class="phase-body">Filter by late night activity, USB, failed logins. Students see the logic of data filtering as detective work. Interactive dropdowns.</div>
+  </div>
+  <div class="phase-card">
+    <div class="phase-num">phase 06</div>
+    <div class="phase-title">AI Suspicion Scoring</div>
+    <div class="phase-time">10 min</div>
+    <div class="phase-body">Build a weighted score formula live. Students adjust sliders to change weights and watch scores update in real-time. "Mind blown" moment.</div>
+  </div>
+  <div class="phase-card">
+    <div class="phase-num">phase 07</div>
+    <div class="phase-title">Final Reveal</div>
+    <div class="phase-time">5 min</div>
+    <div class="phase-body">Big red "REVEAL CRIMINAL" button. Show evidence card: Mike is guilty. Tie to real AI: Google, Netflix, banks.</div>
+  </div>
+</div>
+
+<div id="checklist" class="section">
+  <div class="phase-card" style="margin-bottom:0.5rem">
+    <div class="phase-num">pre-demo checklist</div>
+    <div class="phase-title">Everything you need to do — in order</div>
+    <div id="progress-bar" class="progress-bar"><div class="progress-fill" id="prog" style="width:0%"></div></div>
+    <div style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:0.5rem" id="prog-label">0 / 20 complete</div>
+    <ul class="todo-list" id="todo"></ul>
+  </div>
+</div>
+
+<div id="setup" class="section">
+  <div class="phase-card">
+    <div class="phase-num">step 1 — install</div>
+    <div class="phase-title">Installation command</div>
+    <div class="phase-body" style="margin-bottom:0.75rem">Run this in your terminal. This installs everything you need.</div>
+    <pre><code><span class="fn">pip</span> install <span class="var">streamlit</span> <span class="var">pandas</span> <span class="var">plotly</span>
+<button class="copy-btn" onclick="copyCode(this)">copy</button></code></pre>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-num">step 2 — folder structure</div>
+    <div class="phase-title">Create your project</div>
+    <div class="phase-body" style="margin-bottom:0.75rem">Make a folder called <code style="background:rgba(0,255,136,0.1);padding:1px 6px;border-radius:4px;color:#00ff88">crime-demo</code> with exactly two files:</div>
+    <div class="file-block">
+      <div class="file-header">
+        <span class="file-dot" style="background:#ff6b6b"></span>
+        <span class="file-dot" style="background:#f1fa8c"></span>
+        <span class="file-dot" style="background:#00ff88"></span>
+        crime-demo/
+      </div>
+      <code style="color:#a8d8a8;font-size:13px;line-height:2">
+        ├── app.py &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="cm"># main Streamlit app</span><br>
+        └── employee_logs.csv &nbsp; <span class="cm"># the suspect dataset</span>
+      </code>
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-num">step 3 — employee_logs.csv</div>
+    <div class="phase-title">The suspect dataset — paste this exactly</div>
+    <div class="phase-body" style="margin-bottom:0.75rem">Create <code style="background:rgba(0,255,136,0.1);padding:1px 6px;border-radius:4px;color:#00ff88">employee_logs.csv</code> and paste this content:</div>
+    <pre><code>Employee,Login_Hour,USB_Inserted,Files_Opened,Failed_Logins,Typing_Speed,Late_Night_Activity,Data_Transfer_MB
+Alex,9,No,12,1,45,No,20
+Sarah,2,Yes,95,6,120,Yes,900
+John,10,No,18,0,40,No,15
+Mike,1,Yes,110,8,130,Yes,1200
+<button class="copy-btn" onclick="copyCode(this)">copy</button></code></pre>
+    <div class="tip-box">
+      <strong>Why this data works:</strong> Mike and Sarah are obviously suspicious — late night, USB, high transfers. Alex and John are normal. Students will spot this visually before any code runs.
+    </div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-num">step 4 — run</div>
+    <div class="phase-title">Launch the app</div>
+    <pre><code><span class="fn">cd</span> crime-demo
+<span class="fn">streamlit</span> run app.py
+<button class="copy-btn" onclick="copyCode(this)">copy</button></code></pre>
+    <div class="phase-body">Browser opens automatically at <code style="color:#0099ff">localhost:8501</code></div>
+  </div>
+</div>
+
+<div id="code1" class="section">
+  <div class="phase-card">
+    <div class="phase-num">app.py — part 1 of 3</div>
+    <div class="phase-title">Imports, config, custom CSS + data loading</div>
+    <div class="phase-body" style="margin-bottom:0.75rem">
+      <span class="tag tag-blue">streamlit</span>
+      <span class="tag tag-green">pandas</span>
+      <span class="tag tag-yellow">plotly</span>
+    </div>
+    <pre><code><span class="kw">import</span> streamlit <span class="kw">as</span> st
+<span class="kw">import</span> pandas <span class="kw">as</span> pd
+<span class="kw">import</span> plotly.express <span class="kw">as</span> px
+<span class="kw">import</span> plotly.graph_objects <span class="kw">as</span> go
+
+<span class="cm"># ── PAGE CONFIG ─────────────────────────────────────────</span>
+st.<span class="fn">set_page_config</span>(
+    page_title=<span class="st">"Cyber Crime Dashboard"</span>,
+    page_icon=<span class="st">"🔍"</span>,
+    layout=<span class="st">"wide"</span>
+)
+
+<span class="cm"># ── CUSTOM CSS (dark hacker theme) ───────────────────────</span>
+st.<span class="fn">markdown</span>(<span class="st">"""
+&lt;style&gt;
+    .stApp {
+        background-color: #0a0f1a;
+        color: #a8d8a8;
+    }
+    .stApp h1, .stApp h2, .stApp h3 {
+        color: #00ff88;
+        font-family: monospace;
+    }
+    .stDataFrame { border: 1px solid #1e3a5f; }
+    div[data-testid="metric-container"] {
+        background: #0d1b2a;
+        border: 1px solid #1e3a5f;
+        border-radius: 8px;
+        padding: 12px;
+    }
+    div[data-testid="metric-container"] label {
+        color: #4a7fa5 !important;
+    }
+    .stAlert { background: #1a0a0f; border-color: #ff3366; }
+&lt;/style&gt;
+"""</span>, unsafe_allow_html=<span class="kw">True</span>)
+
+<span class="cm"># ── LOAD DATA ────────────────────────────────────────────</span>
+<span class="var">df</span> = pd.<span class="fn">read_csv</span>(<span class="st">"employee_logs.csv"</span>)
+<button class="copy-btn" onclick="copyCode(this)">copy</button></code></pre>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-num">app.py — part 1 continued</div>
+    <div class="phase-title">Screen 1: Dramatic intro header</div>
+    <pre><code><span class="cm"># ── SCREEN 1: INTRO ──────────────────────────────────────</span>
+st.<span class="fn">markdown</span>(<span class="st">"""
+&lt;h1 style="text-align:center; font-size:42px; 
+           color:#00ff88; font-family:monospace;"&gt;
+    🔐 CYBER CRIME INVESTIGATION
+&lt;/h1&gt;
+&lt;p style="text-align:center; color:#ff3366; 
+          font-family:monospace; font-size:16px;"&gt;
+    ⚠️ UNAUTHORIZED DATA LEAK DETECTED — CASE #2024-XRAY
+&lt;/p&gt;
+"""</span>, unsafe_allow_html=<span class="kw">True</span>)
+
+st.<span class="fn">error</span>(<span class="st">"🚨 ALERT: Confidential company data was exfiltrated last night. Suspect analysis in progress..."</span>)
+
+st.<span class="fn">markdown</span>(<span class="st">"---"</span>)
+<button class="copy-btn" onclick="copyCode(this)">copy</button></code></pre>
+
+    <div class="alert-box">⚠️ teaching moment — when you show this, say: "This is what real security dashboards look like. We're going to BUILD one right now."</div>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-num">app.py — part 1 continued</div>
+    <div class="phase-title">Screen 2: Raw data table</div>
+    <pre><code><span class="cm"># ── SCREEN 2: RAW DATA ───────────────────────────────────</span>
+st.<span class="fn">subheader</span>(<span class="st">"📋 Employee Activity Logs — Raw Evidence"</span>)
+st.<span class="fn">markdown</span>(<span class="st">"*Study the data carefully. Who looks suspicious to you?*"</span>)
+
+st.<span class="fn">dataframe</span>(
+    <span class="var">df</span>,
+    use_container_width=<span class="kw">True</span>,
+    hide_index=<span class="kw">True</span>
+)
+
+<span class="cm"># Key statistics</span>
+col1, col2, col3, col4 = st.<span class="fn">columns</span>(<span class="num">4</span>)
+col1.<span class="fn">metric</span>(<span class="st">"👥 Employees"</span>, <span class="fn">len</span>(<span class="var">df</span>))
+col2.<span class="fn">metric</span>(<span class="st">"📊 Features"</span>, <span class="fn">len</span>(<span class="var">df</span>.columns))
+col3.<span class="fn">metric</span>(<span class="st">"🚨 USB Events"</span>, (<span class="var">df</span>[<span class="st">"USB_Inserted"</span>] == <span class="st">"Yes"</span>).<span class="fn">sum</span>())
+col4.<span class="fn">metric</span>(<span class="st">"🌙 Night Activity"</span>, (<span class="var">df</span>[<span class="st">"Late_Night_Activity"</span>] == <span class="st">"Yes"</span>).<span class="fn">sum</span>())
+
+st.<span class="fn">markdown</span>(<span class="st">"---"</span>)
+<button class="copy-btn" onclick="copyCode(this)">copy</button></code></pre>
+  </div>
+</div>
+
+<div id="code2" class="section">
+  <div class="phase-card">
+    <div class="phase-num">app.py — part 2 of 3</div>
+    <div class="phase-title">Screen 3: Statistics + filtering</div>
+    <pre><code><span class="cm"># ── SCREEN 3: DATA ANALYSIS ──────────────────────────────</span>
+st.<span class="fn">subheader</span>(<span class="st">"🔬 Statistical Analysis"</span>)
+
+st.<span class="fn">markdown</span>(<span class="st">"**df.describe()** — here's what the numbers tell us:"</span>)
+st.<span class="fn">dataframe</span>(<span class="var">df</span>.<span class="fn">describe</span>().<span class="fn">round</span>(<span class="num">2</span>), use_container_width=<span class="kw">True</span>)
+
+st.<span class="fn">info</span>(<span class="st">"💡 Look at the MAX values. Anything that's WAY above average is suspicious."</span>)
+
+st.<span class="fn">markdown</span>(<span class="st">"---"</span>)
+
+<span class="cm"># ── SCREEN 4: FILTERING ──────────────────────────────────</span>
+st.<span class="fn">subheader</span>(<span class="st">"🕵️ Interactive Filtering — Narrow Down Suspects"</span>)
+
+<span class="var">filter_night</span> = st.<span class="fn">checkbox</span>(<span class="st">"🌙 Show only late-night users"</span>, value=<span class="kw">False</span>)
+<span class="var">filter_usb</span> = st.<span class="fn">checkbox</span>(<span class="st">"💾 Show only USB users"</span>, value=<span class="kw">False</span>)
+
+<span class="var">filtered</span> = <span class="var">df</span>.<span class="fn">copy</span>()
+
+<span class="kw">if</span> <span class="var">filter_night</span>:
+    <span class="var">filtered</span> = <span class="var">filtered</span>[<span class="var">filtered</span>[<span class="st">"Late_Night_Activity"</span>] == <span class="st">"Yes"</span>]
+
+<span class="kw">if</span> <span class="var">filter_usb</span>:
+    <span class="var">filtered</span> = <span class="var">filtered</span>[<span class="var">filtered</span>[<span class="st">"USB_Inserted"</span>] == <span class="st">"Yes"</span>]
+
+st.<span class="fn">dataframe</span>(<span class="var">filtered</span>, use_container_width=<span class="kw">True</span>, hide_index=<span class="kw">True</span>)
+st.<span class="fn">caption</span>(<span class="fn">f</span><span class="st">"{len(filtered)} suspect(s) match your filter criteria"</span>)
+
+st.<span class="fn">markdown</span>(<span class="st">"---"</span>)
+<button class="copy-btn" onclick="copyCode(this)">copy</button></code></pre>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-num">app.py — part 2 continued</div>
+    <div class="phase-title">Screen 5: 4 visualization charts</div>
+    <pre><code><span class="cm"># ── SCREEN 5: VISUALIZATION ──────────────────────────────</span>
+st.<span class="fn">subheader</span>(<span class="st">"📊 Evidence Charts — Visualizing Anomalies"</span>)
+
+col1, col2 = st.<span class="fn">columns</span>(<span class="num">2</span>)
+
+<span class="cm"># Chart 1 — Files Opened</span>
+<span class="kw">with</span> col1:
+    <span class="var">fig1</span> = px.<span class="fn">bar</span>(
+        <span class="var">df</span>, x=<span class="st">"Employee"</span>, y=<span class="st">"Files_Opened"</span>,
+        title=<span class="st">"📂 Files Opened Per Employee"</span>,
+        color=<span class="st">"Files_Opened"</span>,
+        color_continuous_scale=<span class="st">"Reds"</span>
+    )
+    <span class="var">fig1</span>.update_layout(
+        plot_bgcolor=<span class="st">"#0d1b2a"</span>,
+        paper_bgcolor=<span class="st">"#0d1b2a"</span>,
+        font_color=<span class="st">"#a8d8a8"</span>
+    )
+    st.<span class="fn">plotly_chart</span>(<span class="var">fig1</span>, use_container_width=<span class="kw">True</span>)
+
+<span class="cm"># Chart 2 — Data Transfer</span>
+<span class="kw">with</span> col2:
+    <span class="var">fig2</span> = px.<span class="fn">bar</span>(
+        <span class="var">df</span>, x=<span class="st">"Employee"</span>, y=<span class="st">"Data_Transfer_MB"</span>,
+        title=<span class="st">"📡 Data Transfer (MB) — Suspicious Spikes"</span>,
+        color=<span class="st">"Data_Transfer_MB"</span>,
+        color_continuous_scale=<span class="st">"OrRd"</span>
+    )
+    <span class="var">fig2</span>.update_layout(
+        plot_bgcolor=<span class="st">"#0d1b2a"</span>,
+        paper_bgcolor=<span class="st">"#0d1b2a"</span>,
+        font_color=<span class="st">"#a8d8a8"</span>
+    )
+    st.<span class="fn">plotly_chart</span>(<span class="var">fig2</span>, use_container_width=<span class="kw">True</span>)
+
+col3, col4 = st.<span class="fn">columns</span>(<span class="num">2</span>)
+
+<span class="cm"># Chart 3 — Failed Logins</span>
+<span class="kw">with</span> col3:
+    <span class="var">fig3</span> = px.<span class="fn">bar</span>(
+        <span class="var">df</span>, x=<span class="st">"Employee"</span>, y=<span class="st">"Failed_Logins"</span>,
+        title=<span class="st">"🔐 Failed Login Attempts"</span>,
+        color=<span class="st">"Failed_Logins"</span>,
+        color_continuous_scale=<span class="st">"Blues"</span>
+    )
+    <span class="var">fig3</span>.update_layout(
+        plot_bgcolor=<span class="st">"#0d1b2a"</span>,
+        paper_bgcolor=<span class="st">"#0d1b2a"</span>,
+        font_color=<span class="st">"#a8d8a8"</span>
+    )
+    st.<span class="fn">plotly_chart</span>(<span class="var">fig3</span>, use_container_width=<span class="kw">True</span>)
+
+<span class="cm"># Chart 4 — Heatmap</span>
+<span class="kw">with</span> col4:
+    <span class="var">numeric_cols</span> = [<span class="st">"Files_Opened"</span>, <span class="st">"Failed_Logins"</span>, 
+                     <span class="st">"Typing_Speed"</span>, <span class="st">"Data_Transfer_MB"</span>]
+    <span class="var">heatmap_data</span> = <span class="var">df</span>.<span class="fn">set_index</span>(<span class="st">"Employee"</span>)[<span class="var">numeric_cols</span>]
+    
+    <span class="var">fig4</span> = px.<span class="fn">imshow</span>(
+        <span class="var">heatmap_data</span>,
+        title=<span class="st">"🔥 Suspicion Heatmap"</span>,
+        color_continuous_scale=<span class="st">"RdYlGn_r"</span>,
+        aspect=<span class="st">"auto"</span>
+    )
+    <span class="var">fig4</span>.update_layout(
+        plot_bgcolor=<span class="st">"#0d1b2a"</span>,
+        paper_bgcolor=<span class="st">"#0d1b2a"</span>,
+        font_color=<span class="st">"#a8d8a8"</span>
+    )
+    st.<span class="fn">plotly_chart</span>(<span class="var">fig4</span>, use_container_width=<span class="kw">True</span>)
+
+st.<span class="fn">markdown</span>(<span class="st">"---"</span>)
+<button class="copy-btn" onclick="copyCode(this)">copy</button></code></pre>
+    <div class="tip-box"><strong>Teaching tip:</strong> After Chart 4 (heatmap), ask students: "Which row is the reddest? That's the most suspicious employee. We built this with ONE line of code."</div>
+  </div>
+</div>
+
+<div id="code3" class="section">
+  <div class="phase-card">
+    <div class="phase-num">app.py — part 3 of 3</div>
+    <div class="phase-title">Screen 6: AI suspicion scoring with live sliders</div>
+    <pre><code><span class="cm"># ── SCREEN 6: AI SUSPICION SCORE ─────────────────────────</span>
+st.<span class="fn">subheader</span>(<span class="st">"🤖 AI Suspicion Scoring System"</span>)
+st.<span class="fn">markdown</span>(<span class="st">"*This is where Data Analysis becomes Artificial Intelligence.*"</span>)
+st.<span class="fn">markdown</span>(<span class="st">"Adjust the weights below to see how the AI ranks suspects:"</span>)
+
+<span class="cm"># Interactive weight sliders</span>
+col1, col2, col3 = st.<span class="fn">columns</span>(<span class="num">3</span>)
+
+<span class="kw">with</span> col1:
+    <span class="var">w_logins</span> = st.<span class="fn">slider</span>(
+        <span class="st">"🔐 Failed Login Weight"</span>,
+        min_value=<span class="num">1</span>, max_value=<span class="num">20</span>,
+        value=<span class="num">10</span>, step=<span class="num">1</span>
+    )
+
+<span class="kw">with</span> col2:
+    <span class="var">w_files</span> = st.<span class="fn">slider</span>(
+        <span class="st">"📂 Files Opened Weight"</span>,
+        min_value=<span class="num">0.1</span>, max_value=<span class="num">2.0</span>,
+        value=<span class="num">0.5</span>, step=<span class="num">0.1</span>
+    )
+
+<span class="kw">with</span> col3:
+    <span class="var">w_transfer</span> = st.<span class="fn">slider</span>(
+        <span class="st">"📡 Data Transfer Weight"</span>,
+        min_value=<span class="num">0.01</span>, max_value=<span class="num">0.2</span>,
+        value=<span class="num">0.05</span>, step=<span class="num">0.01</span>
+    )
+
+<span class="cm"># Calculate suspicion score</span>
+<span class="var">df</span>[<span class="st">"Suspicion_Score"</span>] = (
+    <span class="var">df</span>[<span class="st">"Failed_Logins"</span>] * <span class="var">w_logins</span> +
+    <span class="var">df</span>[<span class="st">"Files_Opened"</span>] * <span class="var">w_files</span> +
+    <span class="var">df</span>[<span class="st">"Data_Transfer_MB"</span>] * <span class="var">w_transfer</span>
+).<span class="fn">round</span>(<span class="num">1</span>)
+
+<span class="cm"># Add bonus for night activity + USB</span>
+<span class="var">df</span>[<span class="st">"Suspicion_Score"</span>] += (
+    (<span class="var">df</span>[<span class="st">"Late_Night_Activity"</span>] == <span class="st">"Yes"</span>).<span class="fn">astype</span>(<span class="fn">int</span>) * <span class="num">20</span> +
+    (<span class="var">df</span>[<span class="st">"USB_Inserted"</span>] == <span class="st">"Yes"</span>).<span class="fn">astype</span>(<span class="fn">int</span>) * <span class="num">15</span>
+)
+
+<span class="cm"># Show ranked results</span>
+<span class="var">ranked</span> = <span class="var">df</span>[[<span class="st">"Employee"</span>, <span class="st">"Suspicion_Score"</span>]].<span class="fn">sort_values</span>(
+    <span class="st">"Suspicion_Score"</span>, ascending=<span class="kw">False</span>
+)
+
+<span class="cm"># Score bar chart</span>
+<span class="var">fig_score</span> = px.<span class="fn">bar</span>(
+    <span class="var">ranked</span>, x=<span class="st">"Employee"</span>, y=<span class="st">"Suspicion_Score"</span>,
+    title=<span class="st">"🎯 Live Suspicion Score — Updates as you move sliders"</span>,
+    color=<span class="st">"Suspicion_Score"</span>,
+    color_continuous_scale=<span class="st">"thermal"</span>
+)
+<span class="var">fig_score</span>.update_layout(
+    plot_bgcolor=<span class="st">"#0d1b2a"</span>,
+    paper_bgcolor=<span class="st">"#0d1b2a"</span>,
+    font_color=<span class="st">"#a8d8a8"</span>
+)
+st.<span class="fn">plotly_chart</span>(<span class="var">fig_score</span>, use_container_width=<span class="kw">True</span>)
+
+st.<span class="fn">dataframe</span>(<span class="var">ranked</span>, use_container_width=<span class="kw">True</span>, hide_index=<span class="kw">True</span>)
+
+st.<span class="fn">markdown</span>(<span class="st">"---"</span>)
+<button class="copy-btn" onclick="copyCode(this)">copy</button></code></pre>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-num">app.py — final screen</div>
+    <div class="phase-title">Screen 7: The big reveal</div>
+    <pre><code><span class="cm"># ── SCREEN 7: FINAL REVEAL ───────────────────────────────</span>
+st.<span class="fn">subheader</span>(<span class="st">"🚨 Final Verdict"</span>)
+
+<span class="kw">if</span> st.<span class="fn">button</span>(<span class="st">"🔴 REVEAL THE CRIMINAL"</span>, type=<span class="st">"primary"</span>):
+    <span class="var">top_suspect</span> = <span class="var">ranked</span>.<span class="fn">iloc</span>[<span class="num">0</span>][<span class="st">"Employee"</span>]
+    <span class="var">top_score</span> = <span class="var">ranked</span>.<span class="fn">iloc</span>[<span class="num">0</span>][<span class="st">"Suspicion_Score"</span>]
+    
+    st.<span class="fn">markdown</span>(<span class="fn">f</span><span class="st">"""
+    &lt;div style="background:#1a0a0f; border:2px solid #ff3366;
+                border-radius:12px; padding:24px; text-align:center;"&gt;
+        &lt;h1 style="color:#ff3366; font-family:monospace;"&gt;
+            ⚠️ CRIMINAL IDENTIFIED ⚠️
+        &lt;/h1&gt;
+        &lt;h2 style="color:#ffffff; font-size:48px;"&gt;{top_suspect}&lt;/h2&gt;
+        &lt;p style="color:#ff6b6b; font-size:20px;"&gt;
+            Suspicion Score: {top_score}
+        &lt;/p&gt;
+        &lt;p style="color:#4a7fa5; font-family:monospace;"&gt;
+            AI ANALYSIS: 95% probability of insider threat detected
+        &lt;/p&gt;
+    &lt;/div&gt;
+    """</span>, unsafe_allow_html=<span class="kw">True</span>)
+
+    st.<span class="fn">error</span>(<span class="st">"🔴 Evidence: Late-night access + USB exfiltration + 1200MB data transfer + 8 failed login attempts"</span>)
+    
+    <span class="cm"># Evidence breakdown</span>
+    st.<span class="fn">subheader</span>(<span class="st">"📋 Evidence Summary"</span>)
+    <span class="var">suspect_data</span> = <span class="var">df</span>[<span class="var">df</span>[<span class="st">"Employee"</span>] == <span class="var">top_suspect</span>]
+    st.<span class="fn">dataframe</span>(<span class="var">suspect_data</span>, use_container_width=<span class="kw">True</span>, hide_index=<span class="kw">True</span>)
+
+    st.<span class="fn">success</span>(<span class="st">"✅ Case closed. Data analysis identified the insider threat."</span>)
+    
+    st.<span class="fn">balloons</span>()  <span class="cm"># 🎉 celebration!</span>
+
+<span class="cm"># ── FOOTER ────────────────────────────────────────────────</span>
+st.<span class="fn">markdown</span>(<span class="st">"---"</span>)
+st.<span class="fn">markdown</span>(<span class="st">"""
+    &lt;p style="text-align:center; color:#4a7fa5; 
+              font-family:monospace; font-size:12px;"&gt;
+    Today we identified a criminal using only data. Imagine what 
+    Google, Netflix, or banks can do with millions of records.
+    &lt;/p&gt;
+"""</span>, unsafe_allow_html=<span class="kw">True</span>)
+<button class="copy-btn" onclick="copyCode(this)">copy</button></code></pre>
+    <div class="tip-box"><strong>Pro tip:</strong> st.balloons() triggers a confetti animation built into Streamlit. Students love this moment — it makes the reveal feel like a real breakthrough.</div>
+  </div>
+</div>
+
+<div id="teaching" class="section">
+  <div class="phase-card">
+    <div class="phase-num">what to say</div>
+    <div class="phase-title">Key phrases to use during the demo</div>
+    <ul class="todo-list" style="margin-top:0.75rem">
+      <li style="padding:10px 0;border-bottom:0.5px solid var(--color-border-tertiary)"><span style="color:#00ff88;font-family:var(--font-mono);font-size:12px">SAY THIS →</span><div style="font-size:14px;color:var(--color-text-primary);margin-top:4px">"We're not filtering data — we're eliminating suspects."</div></li>
+      <li style="padding:10px 0;border-bottom:0.5px solid var(--color-border-tertiary)"><span style="color:#00ff88;font-family:var(--font-mono);font-size:12px">SAY THIS →</span><div style="font-size:14px;color:var(--color-text-primary);margin-top:4px">"This isn't a bar chart — this is evidence."</div></li>
+      <li style="padding:10px 0;border-bottom:0.5px solid var(--color-border-tertiary)"><span style="color:#00ff88;font-family:var(--font-mono);font-size:12px">SAY THIS →</span><div style="font-size:14px;color:var(--color-text-primary);margin-top:4px">"When I move this slider, the AI changes its mind. That's machine learning."</div></li>
+      <li style="padding:10px 0;border-bottom:0.5px solid var(--color-border-tertiary)"><span style="color:#00ff88;font-family:var(--font-mono);font-size:12px">SAY THIS →</span><div style="font-size:14px;color:var(--color-text-primary);margin-top:4px">"Netflix uses this EXACT same logic to decide what to recommend you."</div></li>
+      <li style="padding:10px 0;border-bottom:0.5px solid var(--color-border-tertiary)"><span style="color:#ff6b6b;font-family:var(--font-mono);font-size:12px">DON'T SAY →</span><div style="font-size:14px;color:var(--color-text-secondary);margin-top:4px">"This is pandas syntax" / "This is a DataFrame" / "Let me explain the API"</div></li>
+      <li style="padding:10px 0"><span style="color:#ff6b6b;font-family:var(--font-mono);font-size:12px">DON'T SAY →</span><div style="font-size:14px;color:var(--color-text-secondary);margin-top:4px">"This might be confusing but..." / Any apologies for complexity</div></li>
+    </ul>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-num">engagement questions</div>
+    <div class="phase-title">Ask these to keep students active</div>
+    <ul class="todo-list" style="margin-top:0.5rem">
+      <li style="padding:9px 0;border-bottom:0.5px solid var(--color-border-tertiary)"><div style="font-size:14px;color:var(--color-text-primary)">"Why is logging in at 1 AM suspicious but not at 9 AM?"</div></li>
+      <li style="padding:9px 0;border-bottom:0.5px solid var(--color-border-tertiary)"><div style="font-size:14px;color:var(--color-text-primary)">"Which column do YOU think matters most?"</div></li>
+      <li style="padding:9px 0;border-bottom:0.5px solid var(--color-border-tertiary)"><div style="font-size:14px;color:var(--color-text-primary)">"If a bank saw 8 failed PIN attempts, what would they do?"</div></li>
+      <li style="padding:9px 0;border-bottom:0.5px solid var(--color-border-tertiary)"><div style="font-size:14px;color:var(--color-text-primary)">"Can you think of a way Mike could fake being innocent?"</div></li>
+      <li style="padding:9px 0"><div style="font-size:14px;color:var(--color-text-primary)">"What data would you add to make this model smarter?"</div></li>
+    </ul>
+  </div>
+
+  <div class="phase-card">
+    <div class="phase-num">live score preview</div>
+    <div class="phase-title">Expected suspicion scores (default weights)</div>
+    <div class="file-block" style="margin-top:0.75rem">
+      <div class="score-row">
+        <div class="score-name">Mike</div>
+        <div class="score-bar-bg"><div class="score-fill" style="width:100%;background:#ff3366"></div></div>
+        <div class="score-num">155</div>
+      </div>
+      <div class="score-row">
+        <div class="score-name">Sarah</div>
+        <div class="score-bar-bg"><div class="score-fill" style="width:75%;background:#ff9933"></div></div>
+        <div class="score-num">117</div>
+      </div>
+      <div class="score-row">
+        <div class="score-name">Alex</div>
+        <div class="score-bar-bg"><div class="score-fill" style="width:14%;background:#00ff88"></div></div>
+        <div class="score-num">22</div>
+      </div>
+      <div class="score-row">
+        <div class="score-name">John</div>
+        <div class="score-bar-bg"><div class="score-fill" style="width:10%;background:#00ff88"></div></div>
+        <div class="score-num">16</div>
+      </div>
+    </div>
+    <div class="tip-box" style="margin-top:0.75rem"><strong>Note:</strong> Sarah is also very suspicious (insider accomplice theory!). This creates great discussion about false positives in AI.</div>
+  </div>
+</div>
+
+<script>
+  const TABS = ['overview','checklist','setup','code1','code2','code3','teaching'];
+  
+  function show(id) {
+    TABS.forEach(t => {
+      document.getElementById(t).classList.toggle('active', t === id);
+    });
+    document.querySelectorAll('.nav-btn').forEach((btn, i) => {
+      btn.classList.toggle('active', TABS[i] === id);
+    });
+  }
+
+  const todos = [
+    { text: "Install Python 3.8+ on your machine", cat: "setup" },
+    { text: "Run: pip install streamlit pandas plotly", cat: "setup" },
+    { text: "Create the crime-demo/ folder", cat: "setup" },
+    { text: "Create employee_logs.csv with the 4 suspect rows", cat: "setup" },
+    { text: "Create app.py — paste Part 1 (imports + CSS + data load)", cat: "code" },
+    { text: "Add Screen 1: dramatic header + st.error alert", cat: "code" },
+    { text: "Add Screen 2: raw data table + 4 metric cards", cat: "code" },
+    { text: "Add Screen 3: df.describe() statistics view", cat: "code" },
+    { text: "Add Screen 4: filtering checkboxes (night activity + USB)", cat: "code" },
+    { text: "Add Screen 5: 4 plotly charts (bar × 3 + heatmap)", cat: "code" },
+    { text: "Add Screen 6: 3 sliders + suspicion score formula", cat: "code" },
+    { text: "Add live score bar chart (updates with sliders)", cat: "code" },
+    { text: "Add Screen 7: REVEAL button with final verdict card", cat: "code" },
+    { text: "Add st.balloons() celebration at reveal", cat: "code" },
+    { text: "Add footer closing quote about Google/Netflix", cat: "code" },
+    { text: "Run: streamlit run app.py — verify all screens work", cat: "test" },
+    { text: "Practice your dramatic opening line out loud", cat: "delivery" },
+    { text: "Prepare your 5 engagement questions", cat: "delivery" },
+    { text: "Do a full 40-min dry run solo", cat: "delivery" },
+    { text: "Have the app open and ready BEFORE students arrive", cat: "delivery" },
+  ];
+
+  const catColors = { setup: 'tag-blue', code: 'tag-green', test: 'tag-yellow', delivery: 'tag-red' };
+  const states = new Array(todos.length).fill(false);
+  const ul = document.getElementById('todo');
+
+  function renderTodos() {
+    ul.innerHTML = '';
+    let done = states.filter(Boolean).length;
+    document.getElementById('prog').style.width = (done / todos.length * 100) + '%';
+    document.getElementById('prog-label').textContent = `${done} / ${todos.length} complete`;
+    
+    todos.forEach((t, i) => {
+      const li = document.createElement('li');
+      li.className = 'todo-item';
+      li.innerHTML = `
+        <div class="todo-check ${states[i] ? 'done' : ''}"></div>
+        <div>
+          <span class="tag ${catColors[t.cat]}">${t.cat}</span>
+          <span class="todo-text ${states[i] ? 'done' : ''}">${t.text}</span>
+        </div>
+      `;
+      li.onclick = () => { states[i] = !states[i]; renderTodos(); };
+      ul.appendChild(li);
+    });
+  }
+  renderTodos();
+
+  function copyCode(btn) {
+    const pre = btn.closest('pre');
+    const text = pre.innerText.replace('copy', '').trim();
+    navigator.clipboard.writeText(text).then(() => {
+      btn.textContent = 'copied!';
+      btn.style.color = '#00ff88';
+      setTimeout(() => { btn.textContent = 'copy'; btn.style.color = ''; }, 1500);
+    });
+  }
+</script>
