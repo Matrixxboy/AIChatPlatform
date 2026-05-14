@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import io from 'socket.io-client';
 import axios from 'axios';
-import { Search, Plus, MessageSquare, Mic, Send, ArrowLeft, Globe, Sparkles, LogOut, X, Phone, Video, MoreVertical, MoreHorizontal, Globe2, Check, CheckCheck, Trash2, FileText, FileImage, File, FileVideo, FileAudio, Download, ExternalLink } from 'lucide-react';
+import { Search, Plus, MessageSquare, Mic, Send, ArrowLeft, Globe, Sparkles, LogOut, X, Phone, Video, MoreVertical, MoreHorizontal, Globe2, Check, CheckCheck, Trash2, FileText, FileImage, File, FileVideo, FileAudio, Download, ExternalLink, Eye, ZoomIn } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import chatBg from '../assets/chat-bg.png';
 
@@ -23,6 +23,7 @@ function ChatRoom({ user, onUserUpdate, socket }) {
   const [isProcessingTranslation, setIsProcessingTranslation] = useState(false);
   const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
   const [attachedFile, setAttachedFile] = useState(null); // { name, url, type }
+  const [previewImage, setPreviewImage] = useState(null); // For full-screen modal
   const [notification, setNotification] = useState({ show: false, message: '', type: 'info' });
 
   const showToast = (message, type = 'info') => {
@@ -623,15 +624,16 @@ function ChatRoom({ user, onUserUpdate, socket }) {
       {/* Message Feed */}
       <div className="flex-1 overflow-y-auto p-4 md:px-10 lg:px-32 space-y-2 custom-scrollbar relative z-10 no-scrollbar">
         <AnimatePresence>
-          {messages.map((msg, i) => (
-          <MessageBubble 
-            key={msg._id || i}
-            msg={msg}
-            isOwn={String(msg.senderId) === String(user.id)}
-            myLang={myLang}
-            domain={domain}
-          />
-        ))}
+          {messages.map((msg, index) => (
+            <MessageBubble 
+              key={msg._id || msg.id || index} 
+              msg={msg} 
+              isOwn={String(msg.senderId) === String(user.id)} 
+              myLang={myLang}
+              domain={session?.domain || 'General'}
+              onImageClick={(data) => setPreviewImage(data)}
+            />
+          ))}
         </AnimatePresence>
         
         {isTranslating && (
@@ -739,6 +741,49 @@ function ChatRoom({ user, onUserUpdate, socket }) {
         </div>
       </footer>
 
+      {/* Premium Full-Screen Image Viewer Modal */}
+      <AnimatePresence>
+        {previewImage && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] bg-black/95 flex flex-col items-center justify-center p-4 md:p-8 backdrop-blur-sm"
+          >
+            <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center bg-gradient-to-b from-black/50 to-transparent">
+              <div className="flex flex-col">
+                <span className="text-white font-bold text-sm truncate max-w-[200px] md:max-w-md">{previewImage.name}</span>
+                <span className="text-white/60 text-[10px] uppercase tracking-widest">Shared Image</span>
+              </div>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => handleDownload(previewImage.url, previewImage.name)}
+                  className="p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors"
+                  title="Download"
+                >
+                  <Download className="w-5 h-5" />
+                </button>
+                <button 
+                  onClick={() => setPreviewImage(null)}
+                  className="p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors"
+                  title="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            
+            <motion.img 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              src={previewImage.url} 
+              alt={previewImage.name}
+              className="max-w-full max-h-[85vh] object-contain shadow-2xl rounded-sm"
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Modern Responsive Toast Notification */}
       <AnimatePresence>
         {notification.show && (
@@ -767,7 +812,7 @@ function ChatRoom({ user, onUserUpdate, socket }) {
   );
 }
 
-const MessageBubble = ({ msg, isOwn, myLang, domain }) => {
+const MessageBubble = ({ msg, isOwn, myLang, domain, onImageClick }) => {
   const [displayText, setDisplayText] = useState(msg.originalText || msg.text);
   const [isTranslating, setIsTranslating] = useState(false);
 
@@ -869,14 +914,24 @@ const MessageBubble = ({ msg, isOwn, myLang, domain }) => {
                           alt={msg.fileName} 
                           className="max-w-full h-auto block cursor-pointer hover:opacity-95 transition-opacity"
                           style={{ maxHeight: '300px' }}
-                          onClick={() => window.open(msg.fileUrl.startsWith('http') || msg.fileUrl.startsWith('/ai-chat-platform') ? msg.fileUrl : `${import.meta.env.VITE_API_URL}${msg.fileUrl}`, '_blank')}
+                          onClick={() => {
+                            const url = msg.fileUrl.startsWith('http') || msg.fileUrl.startsWith('/ai-chat-platform') 
+                              ? msg.fileUrl 
+                              : `${import.meta.env.VITE_API_URL}${msg.fileUrl}`;
+                            onImageClick({ url, name: msg.fileName });
+                          }}
                         />
                         <div className="flex border-t border-black/10">
                           <button 
-                            onClick={() => window.open(msg.fileUrl.startsWith('http') || msg.fileUrl.startsWith('/ai-chat-platform') ? msg.fileUrl : `${import.meta.env.VITE_API_URL}${msg.fileUrl}`, '_blank')}
+                            onClick={() => {
+                              const url = msg.fileUrl.startsWith('http') || msg.fileUrl.startsWith('/ai-chat-platform') 
+                                ? msg.fileUrl 
+                                : `${import.meta.env.VITE_API_URL}${msg.fileUrl}`;
+                              onImageClick({ url, name: msg.fileName });
+                            }}
                             className="flex-1 py-2.5 flex items-center justify-center gap-2 text-[12px] font-bold text-slate-600 hover:bg-black/5 transition-colors border-r border-black/10"
                           >
-                            <ExternalLink className="w-3.5 h-3.5" />
+                            <Eye className="w-3.5 h-3.5" />
                             VIEW FULL
                           </button>
                           <button 

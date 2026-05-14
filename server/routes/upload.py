@@ -12,17 +12,29 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-BASE_URI = os.getenv("BASE_URI", "")
+BASE_URI = os.getenv("BASE_URI", "").strip().strip('"').strip("'")
 
 # Base directory (Local File System Path)
 BASE_DIR = Path(__file__).resolve().parent.parent
 UPLOAD_DIR = BASE_DIR / "public" / "uploads"
 
+# CRITICAL: Diagnostic Logging for Live Server
+logger.info(f"UPLOAD SYSTEM: Base Directory resolved to: {BASE_DIR}")
+logger.info(f"UPLOAD SYSTEM: Files will be saved to: {UPLOAD_DIR}")
+
 # Create upload directory on the local disk if it doesn't exist
-# UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+try:
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    # Check if we can actually write to it
+    test_file = UPLOAD_DIR / ".write_test"
+    test_file.touch()
+    test_file.unlink()
+    logger.info("UPLOAD SYSTEM: Directory is WRITABLE")
+except Exception as e:
+    logger.error(f"UPLOAD SYSTEM ERROR: Cannot prepare directory {UPLOAD_DIR}: {str(e)}")
 
 
-@router.post("/")
+@router.post("")
 async def upload_file(
     file: UploadFile = File(...),
     current_user_id: str = Depends(get_current_user_id)
