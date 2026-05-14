@@ -138,6 +138,9 @@ async def send_message(sid, data):
             "messageType": data.get("messageType", "text"),
             "fileUrl": data.get("fileUrl"),
             "fileName": data.get("fileName"),
+            "replyTo": data.get("replyTo"),
+            "replyToText": data.get("replyToText"),
+            "replyToSender": data.get("replyToSender"),
             "status": "sent",
             "createdAt": datetime.utcnow()
         }

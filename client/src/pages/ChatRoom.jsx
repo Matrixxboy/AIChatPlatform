@@ -25,6 +25,8 @@ function ChatRoom({ user, onUserUpdate, socket }) {
   const [attachedFile, setAttachedFile] = useState(null); // { name, url, type }
   const [previewImage, setPreviewImage] = useState(null); // For full-screen modal
   const [notification, setNotification] = useState({ show: false, message: '', type: 'info' });
+  const [replyingTo, setReplyingTo] = useState(null); // { _id, text, senderName }
+  const [originalMsgView, setOriginalMsgView] = useState(null); // { text, sender }
 
   const showToast = (message, type = 'info') => {
     setNotification({ show: true, message, type });
@@ -285,11 +287,40 @@ function ChatRoom({ user, onUserUpdate, socket }) {
       messageType: attachedFile ? 'file' : 'text',
       fileUrl: attachedFile?.url,
       fileName: attachedFile?.name,
-      fileSize: attachedFile?.size
+      fileSize: attachedFile?.size,
+      replyTo: replyingTo?._id,
+      replyToText: replyingTo?.text,
+      replyToSender: replyingTo?.senderName
     });
 
     setInputText('');
     setAttachedFile(null); // Clear attachment
+    setReplyingTo(null); // Clear reply state
+  };
+
+  const handleCancelUpload = async () => {
+    if (!attachedFile) return;
+    
+    // Extract filename from stored_filename or url
+    // The stored_filename is what the API uses for deletion
+    const filenameToDelete = attachedFile.stored_filename;
+    
+    if (!filenameToDelete) {
+      setAttachedFile(null);
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      await axios.delete(`${import.meta.env.VITE_API_URL}/api/upload/${filenameToDelete}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setAttachedFile(null);
+    } catch (err) {
+      console.error('Failed to delete file:', err);
+      // Even if delete fails on server (maybe already gone), clear locally
+      setAttachedFile(null);
+    }
   };
 
   const getFileIcon = (filename, type) => {
@@ -337,7 +368,8 @@ function ChatRoom({ user, onUserUpdate, socket }) {
       setAttachedFile({
         name: file.name,
         url: res.data.url,
-        type: file.type,
+        stored_filename: res.data.stored_filename,
+        type: file.content_type,
         size: res.data.size
       });
       
@@ -632,6 +664,8 @@ function ChatRoom({ user, onUserUpdate, socket }) {
               myLang={myLang}
               domain={session?.domain || 'General'}
               onImageClick={(data) => setPreviewImage(data)}
+              onReply={(m) => setReplyingTo(m)}
+              onShowOriginal={(text, sender) => setOriginalMsgView({ text, sender })}
             />
           ))}
         </AnimatePresence>
@@ -678,8 +712,31 @@ function ChatRoom({ user, onUserUpdate, socket }) {
                   </p>
                 </div>
                 <button 
-                  onClick={() => setAttachedFile(null)}
+                  onClick={handleCancelUpload}
                   className="p-2 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-full transition-all"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Reply Preview */}
+          <AnimatePresence>
+            {replyingTo && (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="mb-3 p-3 bg-white rounded-xl shadow-lg border-l-4 border-l-brand flex items-center gap-4"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-bold text-brand uppercase tracking-wider">Replying to {replyingTo.senderName}</p>
+                  <p className="text-sm text-slate-600 truncate">{replyingTo.text}</p>
+                </div>
+                <button 
+                  onClick={() => setReplyingTo(null)}
+                  className="p-2 hover:bg-slate-100 text-slate-400 rounded-full transition-all"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -740,6 +797,51 @@ function ChatRoom({ user, onUserUpdate, socket }) {
         </form>
         </div>
       </footer>
+
+      {/* Original Message View Modal */}
+      <AnimatePresence>
+        {originalMsgView && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setOriginalMsgView(null)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="bg-white rounded-2xl p-6 shadow-2xl max-w-md w-full relative z-10"
+            >
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                  <Globe className="w-5 h-5 text-brand" />
+                  Original Message
+                </h3>
+                <button 
+                  onClick={() => setOriginalMsgView(null)}
+                  className="p-2 hover:bg-slate-100 rounded-full text-slate-400"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 mb-4 max-h-[40vh] overflow-y-auto">
+                <p className="text-slate-800 leading-relaxed whitespace-pre-wrap">
+                  {originalMsgView.text}
+                </p>
+              </div>
+              
+              <div className="flex justify-between items-center text-[11px] text-slate-400 font-medium uppercase tracking-wider">
+                <span>Sent by {originalMsgView.sender}</span>
+                <span>Original Text</span>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Premium Full-Screen Image Viewer Modal */}
       <AnimatePresence>
@@ -812,9 +914,10 @@ function ChatRoom({ user, onUserUpdate, socket }) {
   );
 }
 
-const MessageBubble = ({ msg, isOwn, myLang, domain, onImageClick }) => {
+const MessageBubble = ({ msg, isOwn, myLang, domain, onImageClick, onReply, onShowOriginal }) => {
   const [displayText, setDisplayText] = useState(msg.originalText || msg.text);
   const [isTranslating, setIsTranslating] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const formatFileSize = (bytes) => {
     if (!bytes) return '0 Bytes';
@@ -869,13 +972,70 @@ const MessageBubble = ({ msg, isOwn, myLang, domain, onImageClick }) => {
     <motion.div 
       initial={{ opacity: 0, y: 10, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} mb-1 relative`}
+      className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} mb-1 relative group`}
     >
       <div className={`max-w-[85%] md:max-w-[70%] lg:max-w-[60%] px-3 py-1.5 rounded-[12px] shadow-sm relative ${
         isOwn 
           ? 'bg-[#dcf8c6] text-slate-900 rounded-tr-none' 
           : 'bg-white text-slate-900 rounded-tl-none border border-slate-100/50'
       }`}>
+          {/* Options Menu (3 dots) */}
+          <div className={`absolute top-1 ${isOwn ? 'left-[-35px]' : 'right-[-35px]'} opacity-0 group-hover:opacity-100 transition-opacity z-20`}>
+            <div className="relative">
+              <button 
+                onClick={() => setIsMenuOpen(!isMenuOpen)}
+                className="p-1.5 hover:bg-slate-200/50 rounded-full text-slate-500 bg-white/50 backdrop-blur-sm shadow-sm"
+              >
+                <MoreVertical className="w-4 h-4" />
+              </button>
+              
+              <AnimatePresence>
+                {isMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setIsMenuOpen(false)} />
+                    <motion.div 
+                      initial={{ opacity: 0, scale: 0.95, x: isOwn ? -10 : 10 }}
+                      animate={{ opacity: 1, scale: 1, x: 0 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      className={`absolute top-0 ${isOwn ? 'right-0' : 'left-0'} mt-8 w-40 bg-white rounded-xl shadow-xl border border-slate-100 z-40 overflow-hidden py-1`}
+                    >
+                      <button 
+                        onClick={() => {
+                          onReply({ _id: msg._id, text: displayText, senderName: isOwn ? 'You' : 'Participant' });
+                          setIsMenuOpen(false);
+                        }}
+                        className="w-full px-4 py-2 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors uppercase tracking-tight"
+                      >
+                        Reply
+                      </button>
+                      <button 
+                        onClick={() => {
+                          onShowOriginal(msg.originalText, isOwn ? 'You' : 'Participant');
+                          setIsMenuOpen(false);
+                        }}
+                        className="w-full px-4 py-2 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors uppercase tracking-tight"
+                      >
+                        Show Original
+                      </button>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+
+          {/* Reply Context Rendering */}
+          {msg.replyTo && (
+            <div className={`mb-1.5 p-2 rounded-lg border-l-4 border-l-brand/40 text-[12px] cursor-pointer hover:bg-black/5 transition-colors ${isOwn ? 'bg-black/5' : 'bg-slate-50'}`}>
+              <p className="font-bold text-brand uppercase tracking-tight text-[10px] mb-0.5">
+                {msg.replyToSender || 'Replied to'}
+              </p>
+              <p className="text-slate-600 line-clamp-2 italic">
+                {msg.replyToText}
+              </p>
+            </div>
+          )}
+
           {isTranslating ? (
             <div className="flex gap-1 items-center py-2 px-1">
               <div className="w-1 h-1 bg-slate-300 rounded-full animate-bounce"></div>
@@ -902,7 +1062,9 @@ const MessageBubble = ({ msg, isOwn, myLang, domain, onImageClick }) => {
                   }
                   return part;
                 })}
-              </div>              {/* File Attachment Rendering - fulfilling "preview in the chat" */}
+              </div>
+              
+              {/* File Attachment Rendering */}
               {msg.messageType === 'file' && msg.fileUrl && (
                 <div className="mt-2 mb-1">
                   {msg.fileName?.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (

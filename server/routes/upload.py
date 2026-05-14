@@ -106,3 +106,37 @@ async def upload_file(
         "type": file.content_type,
         "size": file_size
     }
+
+@router.delete("/{filename}")
+async def delete_file(
+    filename: str,
+    current_user_id: str = Depends(get_current_user_id)
+):
+    """
+    Delete an uploaded file from the server.
+    """
+    file_path = UPLOAD_DIR / filename
+    
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="File not found"
+        )
+    
+    # Ensure it's within UPLOAD_DIR to prevent path traversal
+    if not str(file_path.resolve()).startswith(str(UPLOAD_DIR.resolve())):
+        raise HTTPException(
+            status_code=403,
+            detail="Unauthorized access"
+        )
+
+    try:
+        file_path.unlink()
+        logger.info(f"UPLOAD SYSTEM: File {filename} deleted by user {current_user_id}")
+        return {"message": "File deleted successfully"}
+    except Exception as e:
+        logger.error(f"UPLOAD SYSTEM ERROR: Could not delete file {filename}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not delete file: {str(e)}"
+        )

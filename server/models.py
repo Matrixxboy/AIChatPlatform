@@ -53,10 +53,13 @@ class MessageBase(BaseModel):
     sessionId: str
     senderId: str
     originalText: str
-    translatedText: str
+    translatedText: str = ""
     fromLang: str
-    toLang: str
+    toLang: str = ""
     confidence: float = 100.0
+    replyTo: Optional[str] = None
+    replyToText: Optional[str] = None
+    replyToSender: Optional[str] = None
 
 class MessageResponse(MessageBase):
     id: str = Field(alias="_id")
