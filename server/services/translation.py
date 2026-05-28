@@ -61,21 +61,31 @@ Return ONLY a valid JSON object:
 
     try:
         async with httpx.AsyncClient(timeout=20.0) as client:
-            logger.info(f"Translating via OpenRouter: {text[:20]}... to {to_lang}")
+            logger.info(f"Translating via OpenAI: {text[:20]}... to {to_lang}")
+
             response = await client.post(
-                "https://openrouter.ai/api/v1/chat/completions",
+                "https://api.openai.com/v1/chat/completions",
                 headers={
                     "Content-Type": "application/json",
-                    "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
-                    "X-Title": "Biz Insights Translator"
+                    "Authorization": f"Bearer {settings.OPENAI_API_KEY}"
                 },
                 json={
-                    "model": "openai/gpt-oss-120b:free",
+                    "model": "gpt-4o-mini",
                     "messages": [
-                        {"role": "system", "content": "You are a professional, accurate translator. You only output valid JSON. Always preserve placeholders like [[URL_X]]."},
-                        {"role": "user", "content": prompt}
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a professional, accurate translator. "
+                                "You only output valid JSON. "
+                                "Always preserve placeholders like [[URL_X]]."
+                            )
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
                     ],
-                    "temperature": 0.1 # Low temperature for high accuracy
+                    "temperature": 0.1
                 }
             )
             
@@ -161,18 +171,28 @@ Return ONLY a valid JSON object:
     try:
         async with httpx.AsyncClient(timeout=40.0) as client:
             logger.info(f"Batch translating {len(messages)} messages to {to_lang}")
+
             response = await client.post(
-                "https://openrouter.ai/api/v1/chat/completions",
+                "https://api.openai.com/v1/chat/completions",
                 headers={
                     "Content-Type": "application/json",
-                    "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
-                    "X-Title": "Biz Insights Translator"
+                    "Authorization": f"Bearer {settings.OPENAI_API_KEY}"
                 },
                 json={
-                    "model": "openai/gpt-oss-120b:free",
+                    "model": "gpt-4o-mini",
                     "messages": [
-                        {"role": "system", "content": "You are a professional translator. You only output valid JSON. Always preserve original IDs."},
-                        {"role": "user", "content": prompt}
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a professional translator. "
+                                "You only output valid JSON. "
+                                "Always preserve original IDs."
+                            )
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
                     ],
                     "temperature": 0.1
                 }

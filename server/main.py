@@ -128,6 +128,20 @@ async def send_message(sid, data):
         return
 
     try:
+        # Fetch original message translations if this is a reply - fulfilling "look in the user's selected language both"
+        reply_to_id = data.get("replyTo")
+        reply_to_translations = {}
+        if reply_to_id:
+            try:
+                original_msg = await messages_collection.find_one({"_id": ObjectId(reply_to_id)})
+                if original_msg:
+                    reply_to_translations = original_msg.get("translations", {})
+                    # Include the original language text as well
+                    orig_lang = original_msg.get("fromLang", "English")
+                    reply_to_translations[orig_lang] = original_msg.get("originalText", original_msg.get("text", ""))
+            except Exception as e:
+                logger.error(f"Error fetching reply-to message: {e}")
+
         # 1. Save to Messages Collection
         new_message = {
             "sessionId": str(session_id),
@@ -138,9 +152,10 @@ async def send_message(sid, data):
             "messageType": data.get("messageType", "text"),
             "fileUrl": data.get("fileUrl"),
             "fileName": data.get("fileName"),
-            "replyTo": data.get("replyTo"),
+            "replyTo": reply_to_id,
             "replyToText": data.get("replyToText"),
             "replyToSender": data.get("replyToSender"),
+            "replyToTranslations": reply_to_translations,
             "status": "sent",
             "createdAt": datetime.utcnow()
         }

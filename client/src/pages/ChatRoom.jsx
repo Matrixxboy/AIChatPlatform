@@ -135,7 +135,7 @@ function ChatRoom({ user, onUserUpdate, socket }) {
 
     socket.emit('join_session', sessionId);
 
-    const handleReceiveMessage = async (message) => {
+    const handleReceiveMessage = (message) => {
       setIsTranslating(false);
       
       // Ensure we have a text field for UI consistency
@@ -146,19 +146,23 @@ function ChatRoom({ user, onUserUpdate, socket }) {
       const messageWithLang = { ...message };
       
       setMessages(prev => {
-        if (messageWithLang.senderId === user.id) {
-          // Match by originalText to replace optimistic message
-          const exists = prev.find(m => m.isOptimistic && m.originalText === messageWithLang.originalText);
+        const senderMatch = String(messageWithLang.senderId) === String(user.id);
+        
+        if (senderMatch) {
+          // Match by originalText (trimmed) to replace optimistic message
+          const exists = prev.find(m => m.isOptimistic && (m.originalText || '').trim() === (messageWithLang.originalText || '').trim());
           if (exists) {
              console.log("Replacing optimistic message", exists._id, "with", messageWithLang._id);
-             return prev.map(m => (m._id === exists._id ? messageWithLang : m));
+             const updated = prev.map(m => (m._id === exists._id ? messageWithLang : m));
+             localStorage.setItem(`cached_messages_${sessionId}`, JSON.stringify(updated));
+             return updated;
           }
         }
         
         if (prev.find(m => m._id === messageWithLang._id)) return prev;
         
         // Mark as seen if it's from others
-        if (messageWithLang.senderId !== user.id) {
+        if (String(messageWithLang.senderId) !== String(user.id)) {
           socket.emit('mark_seen', { 
             messageId: messageWithLang._id, 
             sessionId, 
@@ -272,6 +276,9 @@ function ChatRoom({ user, onUserUpdate, socket }) {
       fileUrl: attachedFile?.url,
       fileName: attachedFile?.name,
       fileSize: attachedFile?.size,
+      replyTo: replyingTo?._id,
+      replyToText: replyingTo?.text,
+      replyToSender: replyingTo?.senderName,
       createdAt: new Date().toISOString(),
       isOptimistic: true
     };
@@ -369,7 +376,7 @@ function ChatRoom({ user, onUserUpdate, socket }) {
         name: file.name,
         url: res.data.url,
         stored_filename: res.data.stored_filename,
-        type: file.content_type,
+        type: file.type,
         size: res.data.size
       });
       
@@ -660,7 +667,9 @@ function ChatRoom({ user, onUserUpdate, socket }) {
             <MessageBubble 
               key={msg._id || msg.id || index} 
               msg={msg} 
+              allMessages={messages}
               isOwn={String(msg.senderId) === String(user.id)} 
+              otherName={session?.name}
               myLang={myLang}
               domain={session?.domain || 'General'}
               onImageClick={(data) => setPreviewImage(data)}
@@ -693,7 +702,7 @@ function ChatRoom({ user, onUserUpdate, socket }) {
                 className="mb-3 p-3 bg-white rounded-xl shadow-lg border border-brand/20 flex items-center gap-4 group"
               >
                 <div className="w-12 h-12 bg-brand/10 rounded-lg flex items-center justify-center overflow-hidden">
-                  {attachedFile.type.startsWith('image/') ? (
+                  {attachedFile.type?.startsWith('image/') ? (
                     <img 
                       src={attachedFile.url.startsWith('http') || attachedFile.url.startsWith('/ai-chat-platform') 
                         ? attachedFile.url 
@@ -914,7 +923,7 @@ function ChatRoom({ user, onUserUpdate, socket }) {
   );
 }
 
-const MessageBubble = ({ msg, isOwn, myLang, domain, onImageClick, onReply, onShowOriginal }) => {
+const MessageBubble = ({ msg, isOwn, myLang, domain, onImageClick, onReply, onShowOriginal, allMessages, otherName }) => {
   const [displayText, setDisplayText] = useState(msg.originalText || msg.text);
   const [isTranslating, setIsTranslating] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -966,7 +975,7 @@ const MessageBubble = ({ msg, isOwn, myLang, domain, onImageClick, onReply, onSh
     } else {
       setDisplayText(msg.originalText || msg.text);
     }
-  }, [myLang, msg.translations]);
+  }, [myLang, msg.translations, msg.originalText, msg.text]);
 
   return (
     <motion.div 
@@ -1001,7 +1010,7 @@ const MessageBubble = ({ msg, isOwn, myLang, domain, onImageClick, onReply, onSh
                     >
                       <button 
                         onClick={() => {
-                          onReply({ _id: msg._id, text: displayText, senderName: isOwn ? 'You' : 'Participant' });
+                          onReply({ _id: msg._id, text: displayText, senderName: isOwn ? 'You' : (otherName || 'Participant') });
                           setIsMenuOpen(false);
                         }}
                         className="w-full px-4 py-2 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors uppercase tracking-tight"
@@ -1010,7 +1019,7 @@ const MessageBubble = ({ msg, isOwn, myLang, domain, onImageClick, onReply, onSh
                       </button>
                       <button 
                         onClick={() => {
-                          onShowOriginal(msg.originalText, isOwn ? 'You' : 'Participant');
+                          onShowOriginal(msg.originalText, isOwn ? 'You' : (otherName || 'Participant'));
                           setIsMenuOpen(false);
                         }}
                         className="w-full px-4 py-2 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors uppercase tracking-tight"
@@ -1031,7 +1040,26 @@ const MessageBubble = ({ msg, isOwn, myLang, domain, onImageClick, onReply, onSh
                 {msg.replyToSender || 'Replied to'}
               </p>
               <p className="text-slate-600 line-clamp-2 italic">
-                {msg.replyToText}
+                {(() => {
+                  // 1. Try to use stored translations for the reply if available (most robust)
+                  if (msg.replyToTranslations && msg.replyToTranslations[myLang]) {
+                    return msg.replyToTranslations[myLang];
+                  }
+                  
+                  // 2. Fallback: Find the replied-to message in current message list
+                  const repliedMsg = allMessages?.find(m => String(m._id || m.id) === String(msg.replyTo));
+                  if (repliedMsg) {
+                    if (repliedMsg.translations && repliedMsg.translations[myLang]) {
+                      return repliedMsg.translations[myLang];
+                    }
+                    if (String(repliedMsg.fromLang).toLowerCase() === String(myLang).toLowerCase() || myLang === 'English') {
+                      return repliedMsg.originalText || repliedMsg.text;
+                    }
+                  }
+                  
+                  // 3. Last resort: use the snapshot text from the time of reply
+                  return msg.replyToText;
+                })()}
               </p>
             </div>
           )}
