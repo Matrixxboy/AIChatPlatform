@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, X, Bell } from 'lucide-react';
+import LandingPage from './pages/LandingPage';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ChatRoom from './pages/ChatRoom';
@@ -133,8 +134,9 @@ function App() {
     <Router basename="/ai-chat-platform">
       <div className="relative">
         <Routes>
-          <Route path="/login" element={!user ? <Login onLogin={handleLogin} /> : <Navigate to="/" />} />
-          <Route path="/" element={user ? <Dashboard user={user} onLogout={handleLogout} onUserUpdate={handleUserUpdate} socket={socket} /> : <Navigate to="/login" />} />
+          <Route path="/" element={<LandingPage user={user} onLogout={handleLogout} />} />
+          <Route path="/login" element={!user ? <Login onLogin={handleLogin} /> : <Navigate to="/dashboard" />} />
+          <Route path="/dashboard" element={user ? <Dashboard user={user} onLogout={handleLogout} onUserUpdate={handleUserUpdate} socket={socket} /> : <Navigate to="/login" />} />
           <Route path="/chat/:sessionId" element={user ? <ChatRoom user={user} onUserUpdate={handleUserUpdate} socket={socket} /> : <Navigate to="/login" />} />
         </Routes>
       </div>
