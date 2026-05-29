@@ -81,7 +81,16 @@ export default function Footer() {
 
       {/* Copyright Bottom Bar */}
       <div className="max-w-7xl mx-auto px-6 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-slate-500 font-semibold">
-        <p>© {new Date().getFullYear()} Biz-AiChat Platform. Powered by BizInsights Enterprise. All rights reserved.</p>
+        <div className="flex flex-col sm:flex-row items-center gap-2 text-center sm:text-left">
+          <span>© {new Date().getFullYear()} Biz-AiChat Platform. All rights reserved.</span>
+          <span className="hidden sm:inline text-slate-350">|</span>
+          <div className="flex items-center gap-1.5 justify-center">
+            <span>Design and developed by</span>
+            <a href="https://biz-insights.com" target="_blank" rel="noopener noreferrer" className="hover:opacity-85 transition-opacity inline-flex items-center">
+              <img src="/ai-chat-platform/biz-insightslogo.png" alt="Biz-Insights" className="h-5 object-contain inline-block" />
+            </a>
+          </div>
+        </div>
         <div className="flex gap-6">
           <a href="#" className="hover:text-slate-900 transition-colors">Privacy Policy</a>
           <a href="#" className="hover:text-slate-900 transition-colors">Terms of Service</a>
