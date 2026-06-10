@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Send,
@@ -20,14 +21,19 @@ export default function ContactUs() {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
-    setTimeout(() => {
+    try {
+      await axios.post(`${import.meta.env.VITE_API_URL}/api/contact`, formData);
       setSubmitting(false);
       setSubmitted(true);
       setFormData({ name: "", email: "", message: "" });
-    }, 1500);
+    } catch (err) {
+      console.error("Failed to submit contact query", err);
+      alert("Failed to send message. Please try again later.");
+      setSubmitting(false);
+    }
   };
 
   const contactDetails = [

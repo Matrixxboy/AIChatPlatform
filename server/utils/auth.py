@@ -28,15 +28,37 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(days=settings.ACCESS_TOKEN_EXPIRE_DAYS)
+        expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.ALGORITHM)
+    return encoded_jwt
+
+def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    to_encode.update({"exp": expire, "type": "refresh"})
+    encoded_jwt = jwt.encode(to_encode, settings.REFRESH_TOKEN_SECRET, algorithm=settings.ALGORITHM)
     return encoded_jwt
 
 def decode_token(token: str):
     try:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.ALGORITHM])
+        if payload.get("type") == "refresh":
+            return None # Use decode_refresh_token for refresh tokens
         return payload
     except JWTError as e:
         logger.error(f"JWT Decode Error: {str(e)} | Token starts with: {token[:10]}...")
+        return None
+
+def decode_refresh_token(token: str):
+    try:
+        payload = jwt.decode(token, settings.REFRESH_TOKEN_SECRET, algorithms=[settings.ALGORITHM])
+        if payload.get("type") != "refresh":
+            return None # Must be a refresh token
+        return payload
+    except JWTError as e:
+        logger.error(f"Refresh JWT Decode Error: {str(e)} | Token starts with: {token[:10]}...")
         return None

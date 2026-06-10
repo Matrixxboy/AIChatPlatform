@@ -9,6 +9,7 @@ users_collection = db.get_collection("users")
 sessions_collection = db.get_collection("sessions")
 user_sessions_collection = db.get_collection("user_sessions")
 messages_collection = db.get_collection("messages")
+contacts_collection = db.get_collection("contacts")
 
 async def get_db():
     return db

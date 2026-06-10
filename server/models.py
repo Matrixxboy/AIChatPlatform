@@ -22,7 +22,7 @@ class UserBase(BaseModel):
     username: str
     name: str
     preferredLanguage: str = "English"
-    preferredLanguage: str = "English"
+    role: str = "user"
 
 class UserCreate(UserBase):
     password: str
@@ -62,6 +62,19 @@ class MessageBase(BaseModel):
     replyToSender: Optional[str] = None
 
 class MessageResponse(MessageBase):
+    id: str = Field(alias="_id")
+    createdAt: datetime = Field(default_factory=datetime.now)
+    class Config:
+        populate_by_name = True
+        arbitrary_types_allowed = True
+        json_encoders = {ObjectId: str}
+
+class ContactCreate(BaseModel):
+    name: str
+    email: EmailStr
+    message: str
+
+class ContactResponse(ContactCreate):
     id: str = Field(alias="_id")
     createdAt: datetime = Field(default_factory=datetime.now)
     class Config:

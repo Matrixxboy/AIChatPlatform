@@ -20,7 +20,7 @@ function Login({ onLogin }) {
     const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
     try {
       const res = await axios.post(`${import.meta.env.VITE_API_URL}${endpoint}`, formData);
-      onLogin(res.data.user, res.data.token);
+      onLogin(res.data.user, res.data.token, res.data.refreshToken);
     } catch (err) {
       setError(err.response?.data?.message || 'Authentication failed. Please check your credentials.');
     } finally {

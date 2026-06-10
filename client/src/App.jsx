@@ -6,6 +6,8 @@ import LandingPage from './pages/LandingPage';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ChatRoom from './pages/ChatRoom';
+import AdminLogin from './pages/AdminLogin';
+import AdminDashboard from './pages/AdminDashboard';
 import io from 'socket.io-client';
 import {Globe} from "lucide-react";
 
@@ -72,7 +74,16 @@ function App() {
     };
   }, [socket]);
 
-  const handleLogin = (userData, token) => {
+  // Effect for force logout
+  useEffect(() => {
+    const onForceLogout = () => {
+      handleLogout();
+    };
+    window.addEventListener('force-logout', onForceLogout);
+    return () => window.removeEventListener('force-logout', onForceLogout);
+  }, [socket]); // depend on socket so handleLogout can close it
+
+  const handleLogin = (userData, token, refreshToken) => {
     // Close old socket if exists
     if (socket) {
       socket.close();
@@ -81,6 +92,9 @@ function App() {
     setUser(userData);
     localStorage.setItem('user', JSON.stringify(userData));
     localStorage.setItem('token', token);
+    if (refreshToken) {
+      localStorage.setItem('refreshToken', refreshToken);
+    }
     
     const hasPrefix = API_URL.includes('/ai-chat-platform');
     const socketBaseUrl = hasPrefix ? API_URL.replace('/ai-chat-platform', '') : API_URL;
@@ -103,6 +117,7 @@ function App() {
     setUser(null);
     localStorage.removeItem('user');
     localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
   };
 
   const handleUserUpdate = (updates) => {
@@ -135,9 +150,11 @@ function App() {
       <div className="relative">
         <Routes>
           <Route path="/" element={<LandingPage user={user} onLogout={handleLogout} />} />
-          <Route path="/login" element={!user ? <Login onLogin={handleLogin} /> : <Navigate to="/dashboard" />} />
-          <Route path="/dashboard" element={user ? <Dashboard user={user} onLogout={handleLogout} onUserUpdate={handleUserUpdate} socket={socket} /> : <Navigate to="/login" />} />
-          <Route path="/chat/:sessionId" element={user ? <ChatRoom user={user} onUserUpdate={handleUserUpdate} socket={socket} /> : <Navigate to="/login" />} />
+          <Route path="/login" element={!user ? <Login onLogin={handleLogin} /> : <Navigate to={user.role === 'admin' ? "/admin/dashboard" : "/dashboard"} />} />
+          <Route path="/dashboard" element={user && user.role !== 'admin' ? <Dashboard user={user} onLogout={handleLogout} onUserUpdate={handleUserUpdate} socket={socket} /> : <Navigate to="/login" />} />
+          <Route path="/chat/:sessionId" element={user && user.role !== 'admin' ? <ChatRoom user={user} onUserUpdate={handleUserUpdate} socket={socket} /> : <Navigate to="/login" />} />
+          <Route path="/admin/login" element={(!user || user.role !== 'admin') ? <AdminLogin onLogin={handleLogin} /> : <Navigate to="/admin/dashboard" />} />
+          <Route path="/admin/dashboard" element={(user && user.role === 'admin') ? <AdminDashboard user={user} onLogout={handleLogout} /> : <Navigate to="/admin/login" />} />
         </Routes>
       </div>
     </Router>

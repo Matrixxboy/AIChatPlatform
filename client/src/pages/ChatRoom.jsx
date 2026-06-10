@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import io from 'socket.io-client';
-import axios from 'axios';
+import api from '../api';
 import { Search, Plus, MessageSquare, Mic, Send, ArrowLeft, Globe, Sparkles, LogOut, X, Phone, Video, MoreVertical, MoreHorizontal, Globe2, Check, CheckCheck, Trash2, FileText, FileImage, File, FileVideo, FileAudio, Download, ExternalLink, Eye, ZoomIn } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import chatBg from '../assets/chat-bg.png';
@@ -47,10 +47,8 @@ function ChatRoom({ user, onUserUpdate, socket }) {
     onUserUpdate({ preferredLanguage: newLang });
     
     try {
-      const token = localStorage.getItem('token');
-      await axios.patch(`${import.meta.env.VITE_API_URL}/api/users/profile`, 
-        { preferredLanguage: newLang },
-        { headers: { Authorization: `Bearer ${token}` } }
+      await api.patch(`/api/users/profile`, 
+        { preferredLanguage: newLang }
       );
       
       // 2. Open the confirmation modal - fulfilling "ask user before calling translating all api"
@@ -66,10 +64,7 @@ function ChatRoom({ user, onUserUpdate, socket }) {
     if (!window.confirm('Are you sure you want to permanently delete this entire conversation? This action cannot be undone.')) return;
     
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`${import.meta.env.VITE_API_URL}/api/sessions/${sessionId}/permanent`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete(`/api/sessions/${sessionId}/permanent`);
       navigate('/');
     } catch (err) {
       console.error('Failed to delete conversation:', err);
@@ -81,12 +76,9 @@ function ChatRoom({ user, onUserUpdate, socket }) {
     const target = targetLangOverride || translationTargetLang;
     setIsProcessingTranslation(true);
     try {
-      const token = localStorage.getItem('token');
-      await axios.post(`${import.meta.env.VITE_API_URL}/api/sessions/${sessionId}/translate-all`, {
+      await api.post(`/api/sessions/${sessionId}/translate-all`, {
         toLang: target,
         domain: domain
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
       });
       
       // Refresh messages to show the newly stored translations
@@ -213,10 +205,7 @@ function ChatRoom({ user, onUserUpdate, socket }) {
 
   const fetchSessionDetails = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/sessions`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await api.get(`/api/sessions`);
       const current = res.data.find(s => s._id === sessionId);
       setSession(current);
     } catch (err) {
@@ -228,10 +217,7 @@ function ChatRoom({ user, onUserUpdate, socket }) {
   const fetchMessages = async () => {
     setIsFetchingMessages(true);
     try {
-      const token = localStorage.getItem('token');
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/sessions/${sessionId}/messages`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await api.get(`/api/sessions/${sessionId}/messages`);
       
       const messagesData = res.data;
       setMessages(messagesData);
@@ -318,10 +304,7 @@ function ChatRoom({ user, onUserUpdate, socket }) {
     }
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`${import.meta.env.VITE_API_URL}/api/upload/${filenameToDelete}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete(`/api/upload/${filenameToDelete}`);
       setAttachedFile(null);
     } catch (err) {
       console.error('Failed to delete file:', err);
@@ -364,10 +347,8 @@ function ChatRoom({ user, onUserUpdate, socket }) {
 
     try {
       setIsFetchingMessages(true);
-      const token = localStorage.getItem('token');
-      const res = await axios.post(`${import.meta.env.VITE_API_URL}/api/upload`, formData, {
+      const res = await api.post(`/api/upload`, formData, {
         headers: { 
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'multipart/form-data'
         }
       });

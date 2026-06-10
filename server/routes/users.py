@@ -14,6 +14,13 @@ async def get_current_user_id(auth: HTTPAuthorizationCredentials = Depends(secur
         raise HTTPException(status_code=401, detail="Invalid token")
     return payload.get("userId")
 
+async def get_current_admin(auth: HTTPAuthorizationCredentials = Depends(security)):
+    user_id = await get_current_user_id(auth)
+    user = await users_collection.find_one({"_id": ObjectId(user_id)})
+    if not user or user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized as admin")
+    return str(user["_id"])
+
 @router.get("/search")
 async def search_users(q: str = Query(...), current_user_id: str = Depends(get_current_user_id)):
     if not q:

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, status
 from models import UserCreate, UserResponse
 from database import users_collection
-from utils.auth import get_password_hash, verify_password, create_access_token
+from utils.auth import get_password_hash, verify_password, create_access_token, create_refresh_token, decode_refresh_token
 from bson import ObjectId
 
 router = APIRouter()
@@ -24,16 +24,19 @@ async def register(user_data: UserCreate):
     result = await users_collection.insert_one(user_dict)
     user_id = str(result.inserted_id)
     
-    # Generate token
+    # Generate tokens
     token = create_access_token(data={"userId": user_id})
+    refresh_token = create_refresh_token(data={"userId": user_id})
     
     return {
         "token": token,
+        "refreshToken": refresh_token,
         "user": {
             "id": user_id,
             "username": user_data.username.lower(),
             "name": user_data.name,
             "preferredLanguage": user_dict.get("preferredLanguage", "English"),
+            "role": user_dict.get("role", "user"),
             "bio": user_dict.get("bio", ""),
             "profileImage": user_dict.get("profileImage", "")
         }
@@ -53,15 +56,37 @@ async def login(user_data: dict):
     
     user_id = str(user["_id"])
     token = create_access_token(data={"userId": user_id})
+    refresh_token = create_refresh_token(data={"userId": user_id})
     
     return {
         "token": token,
+        "refreshToken": refresh_token,
         "user": {
             "id": user_id,
             "username": user["username"],
             "name": user["name"],
             "preferredLanguage": user.get("preferredLanguage", "English"),
+            "role": user.get("role", "user"),
             "bio": user.get("bio", ""),
             "profileImage": user.get("profileImage", "")
         }
+    }
+
+@router.post("/refresh")
+async def refresh(data: dict):
+    refresh_token = data.get("refreshToken")
+    if not refresh_token:
+        raise HTTPException(status_code=400, detail="Refresh token required")
+    
+    payload = decode_refresh_token(refresh_token)
+    if not payload or not payload.get("userId"):
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+    
+    user_id = payload.get("userId")
+    # You could optionally check if the user still exists in the DB here
+    
+    new_token = create_access_token(data={"userId": user_id})
+    
+    return {
+        "token": new_token
     }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '../api';
 import { Search, Plus, MessageSquare, LogOut, UserPlus, Bell, Settings, MoreHorizontal, Globe, Sparkles, LayoutGrid, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import io from 'socket.io-client';
@@ -30,10 +30,8 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
     
     onUserUpdate({ preferredLanguage: newLang });
     try {
-      const token = localStorage.getItem('token');
-      await axios.patch(`${import.meta.env.VITE_API_URL}/api/users/profile`, 
-        { preferredLanguage: newLang },
-        { headers: { Authorization: `Bearer ${token}` } }
+      await api.patch(`/api/users/profile`, 
+        { preferredLanguage: newLang }
       );
       window.location.reload();
     } catch (err) {
@@ -79,10 +77,7 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
   const fetchSessions = async () => {
     setIsFetching(true);
     try {
-      const token = localStorage.getItem('token');
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/sessions`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await api.get(`/api/sessions`);
       setSessions(res.data);
       localStorage.setItem('cached_sessions', JSON.stringify(res.data));
     } catch (err) {
@@ -100,10 +95,7 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
       return;
     }
     try {
-      const token = localStorage.getItem('token');
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/users/search?q=${q}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await api.get(`/api/users/search?q=${q}`);
       setSearchResults(res.data);
     } catch (err) {
       console.error('Search failed');
@@ -112,12 +104,9 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
 
   const createSession = async (otherUser) => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await axios.post(`${import.meta.env.VITE_API_URL}/api/sessions`, {
+      const res = await api.post(`/api/sessions`, {
         name: `Direct Message`,
         participantIds: [otherUser._id]
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
       });
       navigate(`/chat/${res.data._id}`);
     } catch (err) {
@@ -128,10 +117,7 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
   const [isDeleting, setIsDeleting] = useState(null); // sessionId
   const handleDeleteSession = async (sessionId) => {
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`${import.meta.env.VITE_API_URL}/api/sessions/${sessionId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete(`/api/sessions/${sessionId}`);
       setSessions(prev => prev.filter(s => s._id !== sessionId));
       setIsDeleting(null);
     } catch (err) {
@@ -151,10 +137,8 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
   const saveProfile = async () => {
     setIsSavingProfile(true);
     try {
-      const token = localStorage.getItem('token');
-      await axios.patch(`${import.meta.env.VITE_API_URL}/api/users/profile`, 
-        { name: editingName, bio: editingBio },
-        { headers: { Authorization: `Bearer ${token}` } }
+      await api.patch(`/api/users/profile`, 
+        { name: editingName, bio: editingBio }
       );
       onUserUpdate({ name: editingName, bio: editingBio });
     } catch (err) {
@@ -172,10 +156,8 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
     reader.onloadend = async () => {
       const base64String = reader.result;
       try {
-        const token = localStorage.getItem('token');
-        await axios.patch(`${import.meta.env.VITE_API_URL}/api/users/profile`, 
-          { profileImage: base64String },
-          { headers: { Authorization: `Bearer ${token}` } }
+        await api.patch(`/api/users/profile`, 
+          { profileImage: base64String }
         );
         onUserUpdate({ profileImage: base64String });
         setSessions([...sessions]); // Trigger re-render

@@ -51,11 +51,14 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"message": "An internal server error occurred.", "detail": str(exc)},
     )
 
+from routes import auth, users, sessions, upload, contact
+
 # Routes
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(users.router, prefix="/api/users", tags=["users"])
 app.include_router(sessions.router, prefix="/api/sessions", tags=["sessions"])
 app.include_router(upload.router, prefix="/api/upload", tags=["upload"])
+app.include_router(contact.router, prefix="/api/contact", tags=["contact"])
 
 # Static Files - Serving the public/uploads directory
 if not os.path.exists("public/uploads"):
