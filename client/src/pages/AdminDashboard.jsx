@@ -39,7 +39,7 @@ function AdminDashboard({ user, onLogout }) {
       console.error("Failed to fetch contacts", err);
       if (err.response?.status === 403 || err.response?.status === 401) {
         onLogout();
-        navigate("/admin/login");
+        navigate("/admin-login");
       }
     } finally {
       setLoading(false);
@@ -65,7 +65,7 @@ function AdminDashboard({ user, onLogout }) {
           <div>
             <h1 className="font-bold text-lg leading-tight">Admin Console</h1>
             <p className="text-[11px] text-slate-400 font-medium uppercase tracking-wider">
-              Biz Insights Manager
+              Biz-OmniLang Manager
             </p>
           </div>
         </div>

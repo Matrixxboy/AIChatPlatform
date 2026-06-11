@@ -1,55 +1,60 @@
-import React from 'react';
-import { Globe, Shield, MessageSquare, Heart } from 'lucide-react';
+import React from "react";
+import { Globe, Shield, MessageSquare, Heart } from "lucide-react";
 
 export default function Footer() {
   const footerLinks = [
     {
-      title: 'Product',
+      title: "Product",
       links: [
-        { label: 'Translation Engine', href: '#features' },
-        { label: 'Media Sharing', href: '#features' },
-        { label: 'Security Protocols', href: '#' },
-        { label: 'Enterprise Setup', href: '#' }
-      ]
+        { label: "Translation Engine", href: "#features" },
+        { label: "Media Sharing", href: "#features" },
+        { label: "Security Protocols", href: "#" },
+        { label: "Enterprise Setup", href: "#" },
+      ],
     },
     {
-      title: 'Resources',
+      title: "Resources",
       links: [
-        { label: 'How It Works', href: '#how-it-works' },
-        { label: 'Language Matrix', href: '#languages' },
-        { label: 'API Reference', href: '#' },
-        { label: 'Platform Status', href: '#' }
-      ]
+        { label: "How It Works", href: "#how-it-works" },
+        { label: "Language Matrix", href: "#languages" },
+        { label: "API Reference", href: "#" },
+        { label: "Platform Status", href: "#" },
+      ],
     },
     {
-      title: 'Solutions',
+      title: "Solutions",
       links: [
-        { label: 'Global Teams', href: '#use-cases' },
-        { label: 'Customer Support', href: '#use-cases' },
-        { label: 'Remote Offices', href: '#use-cases' },
-        { label: 'Case Studies', href: '#' }
-      ]
-    }
+        { label: "Global Teams", href: "#use-cases" },
+        { label: "Customer Support", href: "#use-cases" },
+        { label: "Remote Offices", href: "#use-cases" },
+        { label: "Case Studies", href: "#" },
+      ],
+    },
   ];
 
   return (
     <footer className="border-t border-slate-200/80 bg-slate-50 py-16">
       <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-12 border-b border-slate-200 pb-12">
-        
         {/* Brand Description Column */}
         <div className="lg:col-span-4 space-y-6">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl overflow-hidden border border-slate-200 bg-white flex items-center justify-center p-0.5 shadow-sm">
-              <img src="/ai-chat-platform/LOGO.jpg" alt="Logo" className="w-full h-full object-cover rounded-lg" />
+              <img
+                src="/ai-chat-platform/biz-insightslogo1.png"
+                alt="Logo"
+                className="w-full h-full object-cover rounded-lg"
+              />
             </div>
             <span className="text-xl font-display font-extrabold tracking-tight text-slate-900">
-              Biz-<span className="text-brand">AiChat</span>
+              Biz-<span className="text-brand">OmniLang</span>
             </span>
           </div>
           <p className="text-sm text-slate-500 font-medium leading-relaxed">
-            Biz-AiChat is a premium multilingual communication workspace connecting global operations in real-time, eliminating language friction instantly.
+            Biz-OmniLang is a premium multilingual communication workspace
+            connecting global operations in real-time, eliminating language
+            friction instantly.
           </p>
-          <div className="flex items-center gap-3 text-slate-400 text-xs font-bold uppercase tracking-widest bg-white border border-slate-200 px-4 py-2 rounded-xl inline-flex shadow-sm">
+          <div className="flex items-center gap-3 text-slate-400 text-xs font-bold uppercase tracking-widest bg-white border border-slate-200 px-4 py-2 rounded-xl shadow-sm">
             <Shield className="w-4 h-4 text-emerald-500" /> End-to-End Encrypted
           </div>
         </div>
@@ -76,25 +81,42 @@ export default function Footer() {
             </div>
           ))}
         </div>
-
       </div>
 
       {/* Copyright Bottom Bar */}
       <div className="max-w-7xl mx-auto px-6 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-slate-500 font-semibold">
         <div className="flex flex-col sm:flex-row items-center gap-2 text-center sm:text-left">
-          <span>© {new Date().getFullYear()} Biz-AiChat Platform. All rights reserved.</span>
+          <span>
+            © {new Date().getFullYear()} Biz-OmniLang & Biz-Insights Platform.
+            All rights reserved.
+          </span>
           <span className="hidden sm:inline text-slate-350">|</span>
           <div className="flex items-center gap-1.5 justify-center">
             <span>Design and developed by</span>
-            <a href="https://biz-insights.com" target="_blank" rel="noopener noreferrer" className="hover:opacity-85 transition-opacity inline-flex items-center">
-              <img src="/ai-chat-platform/biz-insightslogo.png" alt="Biz-Insights" className="h-5 object-contain inline-block" />
+            <a
+              href="https://biz-insights.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:opacity-85 transition-opacity inline-flex items-center"
+            >
+              <img
+                src="/ai-chat-platform/biz-insightslogo.png"
+                alt="Biz-Insights"
+                className="h-5 object-contain inline-block"
+              />
             </a>
           </div>
         </div>
         <div className="flex gap-6">
-          <a href="#" className="hover:text-slate-900 transition-colors">Privacy Policy</a>
-          <a href="#" className="hover:text-slate-900 transition-colors">Terms of Service</a>
-          <a href="#" className="hover:text-slate-900 transition-colors">Contact Support</a>
+          <a href="#" className="hover:text-slate-900 transition-colors">
+            Privacy Policy
+          </a>
+          <a href="#" className="hover:text-slate-900 transition-colors">
+            Terms of Service
+          </a>
+          <a href="#" className="hover:text-slate-900 transition-colors">
+            Contact Support
+          </a>
         </div>
       </div>
     </footer>

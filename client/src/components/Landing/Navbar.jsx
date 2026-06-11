@@ -25,15 +25,15 @@ export default function Navbar({
           className="flex items-center gap-3 cursor-pointer"
           onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
         >
-          <div className="w-10 h-10 rounded-xl overflow-hidden border border-slate-200 bg-white flex items-center justify-center p-0.5 shadow-sm">
+          <div className="w-10 h-10 overflow-hidden flex items-center justify-center p-0.5">
             <img
-              src="/ai-chat-platform/LOGO.jpg"
+              src="/ai-chat-platform/biz-insightslogo1.png"
               alt="Logo"
               className="w-full h-full object-cover rounded-lg"
             />
           </div>
           <span className="text-xl font-display font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-slate-900 via-slate-800 to-brand-600">
-            Biz-<span className="text-brand">AiChat</span>
+            Biz-<span className="text-brand">OmniLang</span>
           </span>
         </div>
 

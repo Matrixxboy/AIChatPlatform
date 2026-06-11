@@ -12,7 +12,7 @@ export default function Testimonials() {
       avatar:
         "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150",
       quote:
-        "Biz-AiChat has revolutionized our offshore support operations. Our US team connects seamlessly with Latin American contractors, translating complex technical specs instantly.",
+        "Biz-OmniLang has revolutionized our offshore support operations. Our US team connects seamlessly with Latin American contractors, translating complex technical specs instantly.",
     },
     {
       name: "Rohan Sharma",
@@ -52,7 +52,7 @@ export default function Testimonials() {
             Trusted by Modern Teams Globally
           </h2>
           <p className="text-slate-500 font-medium text-base">
-            See how international operations teams use Biz-AiChat to maintain
+            See how international operations teams use Biz-OmniLang to maintain
             rapid velocity.
           </p>
         </div>

@@ -7,7 +7,7 @@ from bson import ObjectId
 
 router = APIRouter()
 
-@router.post("/")
+@router.post("")
 async def submit_contact(contact: ContactCreate):
     contact_data = contact.dict()
     contact_data["createdAt"] = datetime.utcnow()
@@ -16,7 +16,7 @@ async def submit_contact(contact: ContactCreate):
     
     return {"message": "Contact request submitted successfully", "id": str(result.inserted_id)}
 
-@router.get("/")
+@router.get("")
 async def get_contacts(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),

@@ -1,9 +1,12 @@
-import React from 'react';
-import { motion } from 'framer-motion';
+import React from "react";
+import { motion } from "framer-motion";
 
 export default function LanguagesOrbit({ languages }) {
   return (
-    <section id="languages" className="py-24 bg-slate-50 overflow-hidden relative">
+    <section
+      id="languages"
+      className="py-24 bg-slate-50 overflow-hidden relative"
+    >
       <div className="max-w-7xl mx-auto px-6">
         <div className="text-center max-w-3xl mx-auto space-y-4 mb-16">
           <h2 className="text-3xl md:text-4xl font-display font-black text-slate-900 tracking-tight">
@@ -25,12 +28,16 @@ export default function LanguagesOrbit({ languages }) {
               transition={{ duration: 0.4, delay: index * 0.05 }}
               className="bg-white hover:bg-slate-50 border border-slate-200 hover:border-brand/40 p-4 rounded-2xl flex items-center gap-3.5 transition-all duration-300 hover:-translate-y-0.5 group cursor-default shadow-sm"
             >
-              <div className="text-2xl bg-slate-100 w-11 h-11 rounded-xl flex items-center justify-center border border-slate-200 group-hover:scale-105 transition-transform">
-                {lang.flag}
+              <div className="bg-slate-100 w-11 h-11 rounded-xl flex items-center justify-center border border-slate-200 group-hover:scale-105 transition-transform">
+                <span className={`fi fi-${lang.countryCode} text-2xl`} />
               </div>
               <div>
-                <h4 className="text-sm font-bold text-slate-900 leading-tight">{lang.name}</h4>
-                <p className="text-[10.5px] text-slate-400 font-semibold">{lang.native}</p>
+                <h4 className="text-sm font-bold text-slate-900 leading-tight">
+                  {lang.name}
+                </h4>
+                <p className="text-[10.5px] text-slate-400 font-semibold">
+                  {lang.native}
+                </p>
               </div>
             </motion.div>
           ))}
