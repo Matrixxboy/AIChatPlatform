@@ -46,11 +46,11 @@ export default function Footer() {
               />
             </div>
             <span className="text-xl font-display font-extrabold tracking-tight text-slate-900">
-              Biz-<span className="text-brand">OmniLang</span>
+              Biz-<span className="text-brand">Translate</span>
             </span>
           </div>
           <p className="text-sm text-slate-500 font-medium leading-relaxed">
-            Biz-OmniLang is a premium multilingual communication workspace
+            Biz-Translate is a premium multilingual communication workspace
             connecting global operations in real-time, eliminating language
             friction instantly.
           </p>
@@ -87,7 +87,7 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto px-6 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-slate-500 font-semibold">
         <div className="flex flex-col sm:flex-row items-center gap-2 text-center sm:text-left">
           <span>
-            © {new Date().getFullYear()} Biz-OmniLang & Biz-Insights Platform.
+            © {new Date().getFullYear()} Biz-Translate & Biz-Insights Platform.
             All rights reserved.
           </span>
           <span className="hidden sm:inline text-slate-350">|</span>

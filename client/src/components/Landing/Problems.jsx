@@ -59,7 +59,7 @@ export default function Problems() {
           </h2>
           <p className="text-slate-500 font-medium text-base">
             Traditional translation software is clunky, slow, and separates
-            teams. Biz-OmniLang brings frictionless connection to every
+            teams. Biz-Translate brings frictionless connection to every
             industry.
           </p>
         </div>

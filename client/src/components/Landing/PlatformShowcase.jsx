@@ -15,7 +15,7 @@ export default function PlatformShowcase({ handleStartChatting }) {
       <div className="max-w-7xl mx-auto px-6 text-center space-y-16">
         <div className="max-w-3xl mx-auto space-y-4">
           <h2 className="text-3xl md:text-4xl font-display font-black text-slate-900 tracking-tight">
-            The Biz-OmniLang Portal Experience
+            The Biz-Translate Portal Experience
           </h2>
           <p className="text-slate-500 font-medium text-base">
             A visually premium dashboard built with modern messaging aesthetics,
@@ -39,7 +39,7 @@ export default function PlatformShowcase({ handleStartChatting }) {
               <div className="flex items-center gap-2">
                 <Laptop className="w-5 h-5 text-brand animate-pulse" />
                 <span className="text-xs font-bold text-slate-800">
-                  Biz-OmniLang Web App
+                  Biz-Translate Web App
                 </span>
               </div>
               <div className="flex gap-1">

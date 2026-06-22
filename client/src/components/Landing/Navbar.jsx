@@ -33,7 +33,7 @@ export default function Navbar({
             />
           </div>
           <span className="text-xl font-display font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-slate-900 via-slate-800 to-brand-600">
-            Biz-<span className="text-brand">OmniLang</span>
+            Biz-<span className="text-brand">Translate</span>
           </span>
         </div>
 

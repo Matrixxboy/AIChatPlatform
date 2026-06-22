@@ -46,7 +46,7 @@ export default function UseCases() {
             Engineered For Diverse Workflows
           </h2>
           <p className="text-slate-500 font-medium text-base">
-            Explore how global operations are leveraging Biz-OmniLang to break
+            Explore how global operations are leveraging Biz-Translate to break
             operational barriers.
           </p>
         </div>

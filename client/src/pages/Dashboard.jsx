@@ -549,7 +549,7 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
             />
           </div>
           <h1 className="text-[32px] font-light text-slate-600 mb-4 tracking-tight">
-            Biz-OmniLang Chat App{" "}
+            Biz-Translate Chat App{" "}
           </h1>
           <p className="text-sm text-slate-500 leading-relaxed font-medium">
             Send and receive messages in any language securely.

@@ -31,7 +31,7 @@ export default function HowItWorks() {
     {
       step: "04",
       title: "Instant Neural Translation",
-      desc: "Biz-OmniLang instantly translates all outbound and inbound texts to the respective preferred language of each user.",
+      desc: "Biz-Translate instantly translates all outbound and inbound texts to the respective preferred language of each user.",
       detail: "Process occurs invisibly in milliseconds.",
       icon: Zap,
       iconColor: "text-amber-500 bg-amber-50 border-amber-100",

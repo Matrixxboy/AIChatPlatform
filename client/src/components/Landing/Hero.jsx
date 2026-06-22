@@ -45,7 +45,7 @@ export default function Hero({
           </h1>
 
           <p className="text-lg text-slate-500 max-w-2xl mx-auto lg:mx-0 leading-relaxed font-medium">
-            Collaborate naturally in your preferred language while Biz-OmniLang
+            Collaborate naturally in your preferred language while Biz-Translate
             instantly translates messages for every participant in real time.
             Share texts, images, and videos without boundaries.
           </p>
@@ -128,7 +128,7 @@ export default function Hero({
                 </div>
                 <div>
                   <h3 className="text-xs font-black text-white">
-                    Biz-OmniLang Neural Room
+                    Biz-Translate Neural Room
                   </h3>
                   <p className="text-[8px] text-emerald-400 font-semibold flex items-center gap-1">
                     <span className="w-1 h-1 bg-emerald-400 rounded-full animate-ping" />{" "}

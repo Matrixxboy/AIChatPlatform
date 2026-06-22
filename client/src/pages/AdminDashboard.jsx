@@ -65,7 +65,7 @@ function AdminDashboard({ user, onLogout }) {
           <div>
             <h1 className="font-bold text-lg leading-tight">Admin Console</h1>
             <p className="text-[11px] text-slate-400 font-medium uppercase tracking-wider">
-              Biz-OmniLang Manager
+              Biz-Translate Manager
             </p>
           </div>
         </div>

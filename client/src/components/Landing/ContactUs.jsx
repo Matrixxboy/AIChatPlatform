@@ -39,7 +39,7 @@ export default function ContactUs() {
   const contactDetails = [
     {
       title: "Email Support",
-      value: "support@biz-omnilang.com",
+      value: "support@biz-translate.com",
       desc: "Direct corporate email channel",
       icon: Mail,
       color: "text-blue-600 bg-blue-50 border-blue-100",

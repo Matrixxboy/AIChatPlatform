@@ -24,7 +24,7 @@ export default function ProblemSection() {
           </h2>
           <p className="text-slate-500 font-medium text-base">
             Manual translation tabs, delayed copy-pastes, and out-of-context
-            slang ruin business communications. Here is how Biz-OmniLang solves
+            slang ruin business communications. Here is how Biz-Translate solves
             it.
           </p>
         </div>
@@ -90,7 +90,7 @@ export default function ProblemSection() {
             </div>
           </motion.div>
 
-          {/* Right Side: The Biz-OmniLang Flow */}
+          {/* Right Side: The Biz-Translate Flow */}
           <motion.div
             initial={{ opacity: 0, x: 30 }}
             whileInView={{ opacity: 1, x: 0 }}
@@ -100,7 +100,7 @@ export default function ProblemSection() {
           >
             <div className="space-y-6">
               <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-brand-100 text-brand rounded-full border border-brand-200/50 text-xs font-bold uppercase tracking-widest animate-pulse">
-                <Zap className="w-4 h-4 text-amber-500" /> Biz-OmniLang
+                <Zap className="w-4 h-4 text-amber-500" /> Biz-Translate
                 Experience
               </div>
               <h3 className="text-2xl font-black text-slate-900 tracking-tight">

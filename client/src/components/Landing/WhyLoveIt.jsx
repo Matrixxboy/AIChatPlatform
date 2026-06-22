@@ -54,7 +54,7 @@ export default function WhyLoveIt() {
       <div className="max-w-7xl mx-auto px-6">
         <div className="text-center max-w-3xl mx-auto space-y-4 mb-20">
           <h2 className="text-3xl md:text-4xl font-display font-black text-slate-900 tracking-tight">
-            Why Users Love Biz-OmniLang
+            Why Users Love Biz-Translate
           </h2>
           <p className="text-slate-500 font-medium text-base">
             Designed from the ground up for elite human connection and zero

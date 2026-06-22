@@ -69,7 +69,7 @@ function Login({ onLogin }) {
           <h1 className="text-4xl font-display font-extrabold tracking-tight text-slate-900 mb-3">
             Biz-
             <span className="bg-clip-text text-transparent bg-gradient-to-r from-brand-600 to-brand-400">
-              OmniLang
+              Translate
             </span>
           </h1>
           <p className="text-slate-400 font-medium tracking-wide uppercase text-[10px]">
