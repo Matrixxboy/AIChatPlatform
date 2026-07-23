@@ -9,59 +9,124 @@ import logging
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+async def insert_system_message(session_id: str, text: str):
+    new_message = {
+        "sessionId": str(session_id),
+        "senderId": "system",
+        "senderName": "System",
+        "originalText": text,
+        "fromLang": "English",
+        "domain": "general",
+        "messageType": "system",
+        "status": "sent",
+        "createdAt": datetime.utcnow(),
+        "translations": {}
+    }
+    res = await messages_collection.insert_one(new_message)
+    new_message["_id"] = str(res.inserted_id)
+    try:
+        from main import sio
+        await sio.emit("receive_message", new_message, room=str(session_id))
+    except Exception as e:
+        logger.error(f"Failed to broadcast system message: {e}")
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_session(session_data: dict, current_user_id: str = Depends(get_current_user_id)):
     participant_ids = session_data.get("participantIds", [])
+    is_group = bool(session_data.get("isGroup", False))
+    group_name = session_data.get("groupName", session_data.get("name", "New Group"))
     
     # Ensure current user is in participants
     participants = list(set([str(p) for p in participant_ids] + [str(current_user_id)]))
     
-    if len(participants) != 2:
-        raise HTTPException(status_code=400, detail="Only 1-on-1 sessions are supported in this architecture currently")
-
-    # 1. Find or create Global Session
-    global_session = await sessions_collection.find_one({
-        "participants": {"$all": participants, "$size": 2}
-    })
-    
-    if not global_session:
+    if not is_group:
+        if len(participants) != 2:
+            raise HTTPException(status_code=400, detail="Only 1-on-1 sessions are supported in this mode")
+            
+        # Find or create Global Session
+        global_session = await sessions_collection.find_one({
+            "participants": {"$all": participants, "$size": 2},
+            "isGroup": {"$ne": True}
+        })
+        
+        if not global_session:
+            global_session_dict = {
+                "participants": participants,
+                "createdBy": current_user_id,
+                "createdAt": datetime.utcnow(),
+                "lastMessage": "",
+                "lastMessageTime": datetime.utcnow(),
+                "isGroup": False
+            }
+            res = await sessions_collection.insert_one(global_session_dict)
+            global_session = global_session_dict
+            global_session["_id"] = res.inserted_id
+            
+        global_session_id = str(global_session["_id"])
+        
+        # Ensure BOTH users have an individual UserSession reference
+        for p_id in participants:
+            other_id = next((pid for pid in participants if pid != p_id), None)
+            await user_sessions_collection.update_one(
+                {"userId": p_id, "sessionId": global_session_id},
+                {
+                    "$set": {
+                        "otherParticipantId": other_id,
+                        "isDeleted": False,
+                        "isGroup": False,
+                        "updatedAt": datetime.utcnow()
+                    },
+                    "$setOnInsert": {
+                        "createdAt": datetime.utcnow(),
+                        "deletedAt": datetime(1970, 1, 1)
+                    }
+                },
+                upsert=True
+            )
+    else:
+        # Create a new Group Session
         global_session_dict = {
             "participants": participants,
             "createdBy": current_user_id,
             "createdAt": datetime.utcnow(),
             "lastMessage": "",
-            "lastMessageTime": datetime.utcnow()
+            "lastMessageTime": datetime.utcnow(),
+            "isGroup": True,
+            "groupName": group_name,
+            "admins": [current_user_id]
         }
         res = await sessions_collection.insert_one(global_session_dict)
-        global_session = global_session_dict
-        global_session["_id"] = res.inserted_id
-
-    global_session_id = str(global_session["_id"])
-
-    # 2. Ensure BOTH users have an individual UserSession reference - fulfilling "Store chat data individually"
-    for p_id in participants:
-        other_id = next((pid for pid in participants if pid != p_id), None)
-        await user_sessions_collection.update_one(
-            {"userId": p_id, "sessionId": global_session_id},
-            {
-                "$set": {
-                    "otherParticipantId": other_id,
-                    "isDeleted": False,
-                    "updatedAt": datetime.utcnow()
+        global_session_id = str(res.inserted_id)
+        
+        # Ensure ALL group members have an individual UserSession reference
+        for p_id in participants:
+            await user_sessions_collection.update_one(
+                {"userId": p_id, "sessionId": global_session_id},
+                {
+                    "$set": {
+                        "isDeleted": False,
+                        "isGroup": True,
+                        "updatedAt": datetime.utcnow()
+                    },
+                    "$setOnInsert": {
+                        "createdAt": datetime.utcnow(),
+                        "deletedAt": datetime(1970, 1, 1)
+                    }
                 },
-                "$setOnInsert": {
-                    "createdAt": datetime.utcnow(),
-                    "deletedAt": datetime(1970, 1, 1)
-                }
-            },
-            upsert=True
-        )
+                upsert=True
+            )
 
-    # Return the user's view of the session
+        # Insert system message for group creation
+        creator_doc = await users_collection.find_one({"_id": ObjectId(current_user_id)})
+        creator_name = creator_doc.get("fullName") or creator_doc.get("name") if creator_doc else "User"
+        await insert_system_message(global_session_id, f"{creator_name} created the group \"{group_name}\"")
+            
     return {
         "_id": global_session_id,
         "participants": participants,
-        "name": session_data.get("name") # Temporary, will be dynamic in get_sessions
+        "isGroup": is_group,
+        "admins": [current_user_id] if is_group else [],
+        "name": group_name if is_group else None
     }
 
 @router.get("")
@@ -82,6 +147,22 @@ async def get_sessions(current_user_id: str = Depends(get_current_user_id)):
         global_sess = await sessions_collection.find_one({"_id": ObjectId(sess_id)})
         if not global_sess: continue
         
+        # Check if it is a group session
+        if global_sess.get("isGroup") or user_sess.get("isGroup"):
+            sessions.append({
+                "_id": sess_id,
+                "isGroup": True,
+                "name": global_sess.get("groupName", "Group Chat"),
+                "lastMessage": global_sess.get("lastMessage"),
+                "lastMessageTime": global_sess.get("lastMessageTime"),
+                "participants": [str(p) for p in global_sess.get("participants", [])],
+                "admins": [str(a) for a in global_sess.get("admins", [])],
+                "otherUser": None
+            })
+            continue
+
+        # Fallback if otherParticipantId is missing - fulfilling "security and maintain both user"
+        other_user_id = user_sess.get("otherParticipantId")
         if not other_user_id:
             other_user_id = next((p for p in global_sess.get("participants", []) if str(p) != str(current_user_id)), None)
         
@@ -92,6 +173,7 @@ async def get_sessions(current_user_id: str = Depends(get_current_user_id)):
         
         sessions.append({
             "_id": sess_id,
+            "isGroup": False,
             "name": other_user.get("fullName") or other_user.get("name") if other_user else "Unknown User",
             "lastMessage": global_sess.get("lastMessage"),
             "lastMessageTime": global_sess.get("lastMessageTime"),
@@ -135,6 +217,15 @@ async def get_messages(session_id: str, current_user_id: str = Depends(get_curre
         msg["_id"] = msg_id
         msg["senderId"] = str(msg["senderId"])
         msg["sessionId"] = str(msg["sessionId"])
+        
+        # Populate senderName and profileImage
+        if msg.get("senderId") == "system":
+            msg["senderName"] = "System"
+            msg["senderProfileImage"] = ""
+        else:
+            sender_doc = await users_collection.find_one({"_id": ObjectId(msg["senderId"])})
+            msg["senderName"] = sender_doc.get("fullName") or sender_doc.get("name") if sender_doc else "Unknown User"
+            msg["senderProfileImage"] = sender_doc.get("profileImage", "") if sender_doc else ""
         
         # Merge translations (shared + private cache)
         shared_translations = msg.get("translations", {})
@@ -341,4 +432,136 @@ async def delete_session(session_id: str, current_user_id: str = Depends(get_cur
         )
         
     return {"message": "Chat removed from your dashboard. Other participants still have access to their copies."}
+
+@router.get("/{session_id}/members")
+async def get_session_members(session_id: str, current_user_id: str = Depends(get_current_user_id)):
+    if not ObjectId.is_valid(session_id):
+        raise HTTPException(status_code=400, detail="Invalid session ID")
+    session = await sessions_collection.find_one({"_id": ObjectId(session_id)})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    participants = [str(p) for p in session.get("participants", [])]
+    if current_user_id not in participants:
+        raise HTTPException(status_code=403, detail="Not a participant in this group")
+        
+    members = []
+    for p_id in participants:
+        user = await users_collection.find_one({"_id": ObjectId(p_id)})
+        if user:
+            members.append({
+                "_id": str(user["_id"]),
+                "name": user.get("fullName") or user.get("name") or "User",
+                "email": user.get("email"),
+                "preferredLanguage": user.get("preferredLanguage", "English"),
+                "isAdmin": p_id in session.get("admins", [])
+            })
+    return members
+
+@router.post("/{session_id}/members")
+async def add_session_members(session_id: str, data: dict, current_user_id: str = Depends(get_current_user_id)):
+    if not ObjectId.is_valid(session_id):
+        raise HTTPException(status_code=400, detail="Invalid session ID")
+    session = await sessions_collection.find_one({"_id": ObjectId(session_id)})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+        
+    # Restrict to admins only
+    admins = [str(a) for a in session.get("admins", [])]
+    if current_user_id not in admins:
+        raise HTTPException(status_code=403, detail="Only group admins can add members to this group")
+        
+    participants = [str(p) for p in session.get("participants", [])]
+    new_member_ids = data.get("userIds", [])
+    if not new_member_ids:
+        raise HTTPException(status_code=400, detail="userIds list is required")
+        
+    # Ensure we append new members
+    updated_participants = list(set(participants + [str(u) for u in new_member_ids]))
+    
+    await sessions_collection.update_one(
+        {"_id": ObjectId(session_id)},
+        {"$set": {"participants": updated_participants}}
+    )
+    
+    # Upsert user_sessions references for new participants
+    for p_id in new_member_ids:
+        await user_sessions_collection.update_one(
+            {"userId": str(p_id), "sessionId": session_id},
+            {
+                "$set": {
+                   "isDeleted": False,
+                   "isGroup": True,
+                   "updatedAt": datetime.utcnow()
+                },
+                "$setOnInsert": {
+                    "createdAt": datetime.utcnow(),
+                    "deletedAt": datetime(1970, 1, 1)
+                }
+            },
+            upsert=True
+        )
+
+    # Insert system messages for added members
+    admin_doc = await users_collection.find_one({"_id": ObjectId(current_user_id)})
+    admin_name = admin_doc.get("fullName") or admin_doc.get("name") if admin_doc else "Admin"
+    for p_id in new_member_ids:
+        user_doc = await users_collection.find_one({"_id": ObjectId(p_id)})
+        user_name = user_doc.get("fullName") or user_doc.get("name") if user_doc else "User"
+        await insert_system_message(session_id, f"{admin_name} added {user_name} to the group")
+        
+    return {"message": "Members added successfully", "participants": updated_participants}
+
+@router.delete("/{session_id}/members/{user_id}")
+async def remove_session_member(session_id: str, user_id: str, current_user_id: str = Depends(get_current_user_id)):
+    if not ObjectId.is_valid(session_id):
+        raise HTTPException(status_code=400, detail="Invalid session ID")
+    session = await sessions_collection.find_one({"_id": ObjectId(session_id)})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+        
+    participants = [str(p) for p in session.get("participants", [])]
+    if current_user_id not in participants:
+        raise HTTPException(status_code=403, detail="Not a participant in this group")
+        
+    # Allow user to leave group, OR if admin, remove other user
+    if current_user_id != user_id and current_user_id not in session.get("admins", []):
+        raise HTTPException(status_code=403, detail="Only admins can remove other members")
+        
+    if user_id not in participants:
+        raise HTTPException(status_code=404, detail="Member not in group")
+        
+    # Remove participant
+    participants.remove(user_id)
+    
+    # Update session
+    await sessions_collection.update_one(
+        {"_id": ObjectId(session_id)},
+        {"$set": {"participants": participants}}
+    )
+    
+    # Soft delete this user's user_session
+    await user_sessions_collection.update_one(
+        {"userId": user_id, "sessionId": session_id},
+        {
+            "$set": {
+                "isDeleted": True,
+                "deletedAt": datetime.utcnow(),
+                "updatedAt": datetime.utcnow()
+            }
+        }
+    )
+
+    # Insert system message for removing/leaving member
+    remover_doc = await users_collection.find_one({"_id": ObjectId(current_user_id)})
+    remover_name = remover_doc.get("fullName") or remover_doc.get("name") if remover_doc else "User"
+    removed_doc = await users_collection.find_one({"_id": ObjectId(user_id)})
+    removed_name = removed_doc.get("fullName") or removed_doc.get("name") if removed_doc else "User"
+    
+    if current_user_id == user_id:
+        await insert_system_message(session_id, f"{removed_name} left the group")
+    else:
+        await insert_system_message(session_id, f"{remover_name} removed {removed_name} from the group")
+        
+    return {"message": "Member removed successfully", "participants": participants}
 

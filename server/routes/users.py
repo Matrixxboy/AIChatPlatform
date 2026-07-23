@@ -21,6 +21,25 @@ async def get_current_admin(auth: HTTPAuthorizationCredentials = Depends(securit
         raise HTTPException(status_code=403, detail="Not authorized as admin")
     return str(user["_id"])
 
+@router.get("")
+async def get_all_users(current_user_id: str = Depends(get_current_user_id)):
+    cursor = users_collection.find({
+        "_id": {"$ne": ObjectId(current_user_id)},
+        "isDeleted": {"$ne": True}
+    })
+    users = []
+    async for user in cursor:
+        users.append({
+            "_id": str(user["_id"]),
+            "username": user.get("username"),
+            "name": user.get("name"),
+            "fullName": user.get("fullName") or user.get("name"),
+            "email": user.get("email"),
+            "preferredLanguage": user.get("preferredLanguage", "English"),
+            "profileImage": user.get("profileImage", "")
+        })
+    return users
+
 @router.get("/search")
 async def search_users(q: str = Query(...), current_user_id: str = Depends(get_current_user_id)):
     if not q:

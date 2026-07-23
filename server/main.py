@@ -168,6 +168,12 @@ async def send_message(sid, data):
         message_id = str(result.inserted_id)
         new_message["_id"] = message_id
         
+        # Populate senderName and profileImage
+        from database import users_collection
+        sender_doc = await users_collection.find_one({"_id": ObjectId(user_id)})
+        new_message["senderName"] = sender_doc.get("fullName") or sender_doc.get("name") if sender_doc else "Unknown User"
+        new_message["senderProfileImage"] = sender_doc.get("profileImage", "") if sender_doc else ""
+        
         # 2. Server-Side Auto-Translation for Receivers - fulfilling "store into the user's selected language"
         translations_map = {from_lang: text} # Include sender's language
         
@@ -177,37 +183,28 @@ async def send_message(sid, data):
             
             if session_doc:
                 participants = session_doc.get("participants", [])
+                
+                # Gather unique target languages for active participants
+                unique_target_languages = []
                 for p_id_raw in participants:
                     p_id_str = str(p_id_raw)
                     if p_id_str == str(user_id):
-                        continue # Skip sender
-                    
-                    # Get receiver's preferred language
-                    receiver = await users_collection.find_one({"_id": ObjectId(p_id_str)})
-                    if not receiver:
                         continue
-                        
-                    target_lang = receiver.get("preferredLanguage", "English")
                     
-                    # Only translate if different language
-                    if target_lang != from_lang:
+                    receiver = await users_collection.find_one({"_id": ObjectId(p_id_str)})
+                    if receiver:
+                        target_lang = receiver.get("preferredLanguage", "English")
+                        if target_lang != from_lang:
+                            unique_target_languages.append((p_id_str, target_lang))
+                
+                # Dynamic translation with cache avoidance/sharing
+                translations_cache = {}
+                for p_id_str, target_lang in unique_target_languages:
+                    if target_lang not in translations_cache:
                         res = await translate(text, from_lang, target_lang, domain)
                         if res and "translation" in res:
-                            translated_text = res["translation"]
-                            translations_map[target_lang] = translated_text
+                            translations_cache[target_lang] = res["translation"]
                             
-                            # Store in Receiver's DB document
-                            await users_collection.update_one(
-                                {"_id": ObjectId(p_id_str)},
-                                {"$set": {f"translations.{message_id}.{target_lang}": translated_text}}
-                            )
-                            
-                            # ALSO store in the Shared Message Cache - fulfilling "Optimize translation costs"
-                            await messages_collection.update_one(
-                                {"_id": ObjectId(message_id)},
-                                {"$set": {f"translations.{target_lang}": translated_text}}
-                            )
-
                             # Log translation activity
                             try:
                                 await activity_logs.insert_one({
@@ -222,10 +219,26 @@ async def send_message(sid, data):
                                 })
                             except Exception as log_err:
                                 logger.error(f"Failed to log translation: {log_err}")
+                    
+                    if target_lang in translations_cache:
+                        translated_text = translations_cache[target_lang]
+                        translations_map[target_lang] = translated_text
+                        
+                        # Store in Receiver's DB document
+                        await users_collection.update_one(
+                            {"_id": ObjectId(p_id_str)},
+                            {"$set": {f"translations.{message_id}.{target_lang}": translated_text}}
+                        )
+                        
+                        # ALSO store in the Shared Message Cache
+                        await messages_collection.update_one(
+                            {"_id": ObjectId(message_id)},
+                            {"$set": {f"translations.{target_lang}": translated_text}}
+                        )
         except Exception as trans_err:
             logger.error(f"Server-side translation failed: {trans_err}")
-
-        # 3. Update Session and User-Specific References - fulfilling "independent ownership"
+ 
+        # 3. Update Session and User-Specific References
         await sessions_collection.update_one(
             {"_id": ObjectId(session_id)},
             {
@@ -238,19 +251,24 @@ async def send_message(sid, data):
         
         # Ensure all participants have an ACTIVE user_session reference
         if session_doc:
+            is_group_session = bool(session_doc.get("isGroup", False))
             for p_id_raw in session_doc.get("participants", []):
                 p_id_str = str(p_id_raw)
-                # Determine who the 'other' person is for this specific participant
-                other_p_id = next((str(x) for x in session_doc["participants"] if str(x) != p_id_str), p_id_str)
-                
+                update_fields = {
+                    "isDeleted": False,
+                    "updatedAt": datetime.utcnow()
+                }
+                if not is_group_session:
+                    other_p_id = next((str(x) for x in session_doc["participants"] if str(x) != p_id_str), p_id_str)
+                    update_fields["otherParticipantId"] = other_p_id
+                    update_fields["isGroup"] = False
+                else:
+                    update_fields["isGroup"] = True
+                    
                 await user_sessions_collection.update_one(
                     {"userId": p_id_str, "sessionId": str(session_id)},
                     {
-                        "$set": {
-                            "isDeleted": False, # Re-activate for everyone on new message
-                            "otherParticipantId": other_p_id,
-                            "updatedAt": datetime.utcnow()
-                        },
+                        "$set": update_fields,
                         "$setOnInsert": {
                             "createdAt": datetime.utcnow(),
                             "deletedAt": datetime(1970, 1, 1)

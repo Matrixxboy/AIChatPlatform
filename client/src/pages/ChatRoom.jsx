@@ -30,8 +30,10 @@ import {
   ExternalLink,
   Eye,
   ZoomIn,
+  Users,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import AddGroupMemberModal from "../components/AddGroupMemberModal";
 import chatBg from "../assets/chat-bg.png";
 
 const formatChatDate = (dateString) => {
@@ -144,7 +146,7 @@ function ChatRoom({ user, onUserUpdate, socket }) {
 
     try {
       await api.delete(`/api/sessions/${sessionId}/permanent`);
-      navigate("/");
+      navigate("/dashboard");
     } catch (err) {
       console.error("Failed to delete conversation:", err);
       alert("Failed to delete conversation. Please try again.");
@@ -174,6 +176,36 @@ function ChatRoom({ user, onUserUpdate, socket }) {
   const [isTranslating, setIsTranslating] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [isOtherProfileOpen, setIsOtherProfileOpen] = useState(false);
+  const [isGroupDetailsOpen, setIsGroupDetailsOpen] = useState(false);
+  const [groupMembers, setGroupMembers] = useState([]);
+  const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
+  const [allUsersList, setAllUsersList] = useState([]);
+
+  const fetchGroupMembers = async () => {
+    try {
+      const res = await api.get(`/api/sessions/${sessionId}/members`);
+      setGroupMembers(res.data || []);
+    } catch (err) {
+      console.error("Failed to fetch group members", err);
+    }
+  };
+
+  const fetchAllUsers = async () => {
+    try {
+      const res = await api.get("/api/users");
+      setAllUsersList(res.data || []);
+    } catch (err) {
+      console.error("Failed to fetch all users", err);
+    }
+  };
+
+  useEffect(() => {
+    if (isGroupDetailsOpen && sessionId) {
+      fetchGroupMembers();
+      fetchAllUsers();
+    }
+  }, [isGroupDetailsOpen, sessionId]);
+
   const typingTimeoutRef = useRef(null);
   const messagesEndRef = useRef(null);
   const recognitionRef = useRef(null);
@@ -677,6 +709,128 @@ function ChatRoom({ user, onUserUpdate, socket }) {
         )}
       </AnimatePresence>
 
+      {/* Group Details Profile (Slides in from right) */}
+      <AnimatePresence>
+        {isGroupDetailsOpen && (
+          <motion.div
+            initial={{ x: "100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "100%" }}
+            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+            className="fixed md:absolute inset-y-0 right-0 w-full md:w-[400px] bg-white z-[60] shadow-2xl flex flex-col border-l border-slate-200"
+          >
+            <div className="h-[110px] bg-[#f0f2f5] flex items-end p-6 pb-4 gap-6 shrink-0">
+              <button
+                onClick={() => setIsGroupDetailsOpen(false)}
+                className="text-slate-500 p-1 hover:bg-slate-200 rounded-full transition-all"
+              >
+                <ArrowLeft className="w-6 h-6" />
+              </button>
+              <h2 className="text-slate-800 font-bold text-lg">Group info</h2>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              <div className="bg-white py-6 flex flex-col items-center shadow-sm rounded-2xl border border-slate-100">
+                <div className="w-28 h-28 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center shadow-md mb-4">
+                  <Users className="w-12 h-12" />
+                </div>
+                <h2 className="text-xl font-black text-slate-900 text-center px-4">
+                  {session?.name}
+                </h2>
+                <p className="text-slate-400 text-xs mt-1 font-bold uppercase tracking-wider">
+                  {groupMembers.length} Members
+                </p>
+              </div>
+
+              {/* Add Member Section */}
+              <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm space-y-3">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                    Group Members
+                  </h3>
+                  {session?.isGroup && session?.admins?.includes(user.id) && (
+                    <button
+                      onClick={() => setIsAddMemberOpen(true)}
+                      className="text-xs font-bold text-brand hover:underline cursor-pointer"
+                    >
+                      + Add Member
+                    </button>
+                  )}
+                </div>
+
+                <div className="divide-y divide-slate-100 max-h-[30vh] overflow-y-auto pr-1">
+                  {groupMembers.map((m) => (
+                    <div
+                      key={m._id}
+                      className="py-2.5 flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div>
+                        <p className="font-bold text-slate-800 flex items-center gap-1.5">
+                          {m.name}
+                          {m.isAdmin && (
+                            <span className="text-[9px] bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                              Admin
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-medium">
+                          Speaks {m.preferredLanguage || "English"}
+                        </p>
+                      </div>
+
+                      {/* Allow admins (or creator) to remove members, and allow leaving */}
+                      {String(m._id) !== String(user.id)
+                        ? session?.admins?.includes(user.id) && (
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await api.delete(
+                                    `/api/sessions/${sessionId}/members/${m._id}`,
+                                  );
+                                  fetchGroupMembers();
+                                  showToast(
+                                    `${m.name} removed from group`,
+                                    "info",
+                                  );
+                                } catch (err) {
+                                  console.error("Failed to remove member", err);
+                                  showToast("Failed to remove member", "error");
+                                }
+                              }}
+                              className="text-[10px] text-red-500 font-bold hover:underline"
+                            >
+                              Remove
+                            </button>
+                          )
+                        : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Leave Group Action */}
+              <button
+                onClick={async () => {
+                  try {
+                    await api.delete(
+                      `/api/sessions/${sessionId}/members/${user.id}`,
+                    );
+                    navigate("/dashboard");
+                  } catch (err) {
+                    console.error("Failed to leave group", err);
+                    showToast("Failed to leave group", "error");
+                  }
+                }}
+                className="w-full bg-red-50 hover:bg-red-100 text-red-600 rounded-2xl py-3 text-xs font-bold transition-colors flex items-center justify-center gap-2 border border-red-100"
+              >
+                <LogOut className="w-4 h-4" />
+                Leave Group
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Professional Header */}
       <header className="h-[70px] bg-[#f0f2f5] border-b border-slate-200/60 px-4 flex items-center justify-between shadow-sm z-30 relative">
         <div className="flex items-center gap-3">
@@ -688,7 +842,11 @@ function ChatRoom({ user, onUserUpdate, socket }) {
           </button>
 
           <div
-            onClick={() => setIsOtherProfileOpen(true)}
+            onClick={() =>
+              session?.isGroup
+                ? setIsGroupDetailsOpen(true)
+                : setIsOtherProfileOpen(true)
+            }
             className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
           >
             <div className="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center shadow-sm overflow-hidden">
@@ -698,6 +856,10 @@ function ChatRoom({ user, onUserUpdate, socket }) {
                   alt="Profile"
                   className="w-full h-full object-cover"
                 />
+              ) : session?.isGroup ? (
+                <div className="w-full h-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                  <Users className="w-5.5 h-5.5" />
+                </div>
               ) : session?.name ? (
                 <div className="w-full h-full bg-brand/10 text-brand flex items-center justify-center font-bold text-base">
                   {session.name[0].toUpperCase()}
@@ -706,8 +868,8 @@ function ChatRoom({ user, onUserUpdate, socket }) {
                 <Globe className="w-5 h-5 text-slate-400" />
               )}
             </div>
-            <div className="flex flex-col">
-              <h3 className="font-bold text-[15px] text-slate-900 leading-tight">
+            <div className="flex flex-col min-w-0">
+              <h3 className="font-bold text-[13px] sm:text-[15px] text-slate-900 leading-tight truncate max-w-[80px] xs:max-w-[135px] sm:max-w-[220px] md:max-w-xs">
                 {session?.name || "Loading..."}
               </h3>
               <div className="flex items-center gap-1.5 mt-0.5">
@@ -725,6 +887,10 @@ function ChatRoom({ user, onUserUpdate, socket }) {
                       syncing messages...
                     </p>
                   </div>
+                ) : session?.isGroup ? (
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    Tap to view members
+                  </p>
                 ) : (
                   <p className="text-[11px] text-slate-500 font-medium">
                     {isConnected ? "online" : "reconnecting..."}
@@ -735,13 +901,13 @@ function ChatRoom({ user, onUserUpdate, socket }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 md:gap-4">
-          <div className="flex items-center gap-1 md:gap-2 bg-white/80 backdrop-blur-sm p-1.5 px-2 md:px-3 rounded-xl border border-slate-200 shadow-sm">
-            <Globe className="hidden xs:block w-3 h-3 md:w-3.5 md:h-3.5 text-brand" />
+        <div className="flex items-center gap-1.5 sm:gap-2 md:gap-4 shrink-0">
+          <div className="flex items-center gap-1 bg-white/80 backdrop-blur-sm p-1 sm:p-1.5 px-1.5 sm:px-2 rounded-lg sm:rounded-xl border border-slate-200 shadow-sm max-w-[85px] xs:max-w-[125px] sm:max-w-none">
+            <Globe className="hidden sm:block w-3 h-3 sm:w-3.5 sm:h-3.5 text-brand shrink-0" />
             <select
               value={myLang}
               onChange={(e) => handleLanguageChangeRequest(e.target.value)}
-              className="text-[11px] font-bold bg-transparent border-none outline-none text-slate-700 cursor-pointer uppercase tracking-tight"
+              className="text-[10px] sm:text-[11px] font-black bg-transparent border-none outline-none text-slate-700 cursor-pointer uppercase tracking-tight max-w-full truncate"
             >
               {languages.map((l) => (
                 <option key={l} value={l}>
@@ -795,16 +961,18 @@ function ChatRoom({ user, onUserUpdate, socket }) {
                         Translate Chat History
                       </button>
                       <div className="h-[1px] bg-slate-100 my-1" />
-                      <button
-                        onClick={() => {
-                          setIsHeaderMenuOpen(false);
-                          handleDeleteConversation();
-                        }}
-                        className="w-full px-4 py-3 text-left text-sm font-medium text-red-600 hover:bg-red-50 flex items-center gap-3 transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        Delete Chat Permanently
-                      </button>
+                      {(!session?.isGroup || session?.admins?.includes(user.id)) && (
+                        <button
+                          onClick={() => {
+                            setIsHeaderMenuOpen(false);
+                            handleDeleteConversation();
+                          }}
+                          className="w-full px-4 py-3 text-left text-sm font-medium text-red-600 hover:bg-red-50 flex items-center gap-3 transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          {session?.isGroup ? "Delete Group Permanently" : "Delete Chat Permanently"}
+                        </button>
+                      )}
                     </motion.div>
                   </>
                 )}
@@ -842,6 +1010,7 @@ function ChatRoom({ user, onUserUpdate, socket }) {
                   allMessages={messages}
                   isOwn={String(msg.senderId) === String(user.id)}
                   otherName={session?.name}
+                  isGroup={session?.isGroup}
                   myLang={myLang}
                   domain={session?.domain || "General"}
                   onImageClick={(data) => setPreviewImage(data)}
@@ -1147,6 +1316,14 @@ function ChatRoom({ user, onUserUpdate, socket }) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <AddGroupMemberModal
+        isOpen={isAddMemberOpen}
+        onClose={() => setIsAddMemberOpen(false)}
+        sessionId={sessionId}
+        existingMembers={groupMembers}
+        onAddSuccess={fetchGroupMembers}
+      />
     </div>
   );
 }
@@ -1161,6 +1338,7 @@ const MessageBubble = ({
   onShowOriginal,
   allMessages,
   otherName,
+  isGroup,
 }) => {
   const [displayText, setDisplayText] = useState(msg.originalText || msg.text);
   const [isTranslating, setIsTranslating] = useState(false);
@@ -1220,12 +1398,52 @@ const MessageBubble = ({
     }
   }, [myLang, msg.translations, msg.originalText, msg.text]);
 
+  if (msg.messageType === "system") {
+    return (
+      <div className="w-full flex justify-center my-2 shrink-0">
+        <div className="bg-amber-50/60 border border-amber-100/40 text-slate-500 text-[10px] sm:text-[11px] px-3.5 py-1.5 rounded-full shadow-sm text-center max-w-[85%] font-bold tracking-wide">
+          {displayText}
+        </div>
+      </div>
+    );
+  }
+
+  const getAvatarColor = (name) => {
+    if (!name) return "bg-brand/10 text-brand border-brand/20";
+    const colors = [
+      "bg-red-50 text-red-600 border-red-100",
+      "bg-amber-50 text-amber-600 border-amber-100",
+      "bg-emerald-50 text-emerald-600 border-emerald-100",
+      "bg-teal-50 text-teal-600 border-teal-100",
+      "bg-blue-50 text-blue-600 border-blue-100",
+      "bg-indigo-50 text-indigo-600 border-indigo-100",
+      "bg-purple-50 text-purple-600 border-purple-100",
+      "bg-pink-50 text-pink-600 border-pink-100",
+    ];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+      hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const index = Math.abs(hash) % colors.length;
+    return colors[index];
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      className={`flex flex-col ${isOwn ? "items-end" : "items-start"} mb-1 relative group`}
+      className={`flex ${isOwn ? "justify-end" : "justify-start"} items-end gap-2 mb-1.5 relative group w-full`}
     >
+      {!isOwn && isGroup && (
+        <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-[10px] uppercase shrink-0 select-none shadow-sm border ${getAvatarColor(msg.senderName)} mb-[2px] overflow-hidden`}>
+          {msg.senderProfileImage ? (
+            <img src={msg.senderProfileImage} alt="Profile" className="w-full h-full object-cover" />
+          ) : (
+            msg.senderName ? msg.senderName[0].toUpperCase() : "M"
+          )}
+        </div>
+      )}
+
       <div
         className={`max-w-[85%] md:max-w-[70%] lg:max-w-[60%] px-3 py-1.5 rounded-[12px] shadow-sm relative ${
           isOwn
@@ -1233,6 +1451,11 @@ const MessageBubble = ({
             : "bg-white text-slate-900 rounded-tl-none border border-slate-100/50"
         }`}
       >
+        {isGroup && !isOwn && (
+          <p className="text-[10px] font-bold text-brand uppercase tracking-wider mb-1 block">
+            {msg.senderName || "Member"}
+          </p>
+        )}
         {/* Options Menu (3 dots) */}
         <div
           className={`absolute top-1 ${isOwn ? "left-[-35px]" : "right-[-35px]"} opacity-0 group-hover:opacity-100 transition-opacity z-20`}

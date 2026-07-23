@@ -15,10 +15,12 @@ import {
   LayoutGrid,
   ShieldCheck,
   ArrowLeft,
+  Users,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import io from "socket.io-client";
 import { formatLastMessageTime } from "../libs/util";
+import GroupCreateModal from "../components/GroupCreateModal";
 
 function Dashboard({ user, onLogout, onUserUpdate, socket }) {
   const [sessions, setSessions] = useState(() => {
@@ -30,6 +32,7 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
   const [myLang, setMyLang] = useState(
     () =>
       user.preferredLanguage ||
@@ -340,6 +343,13 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
               <MessageSquare className="w-5 h-5" />
             </button> */}
             <button
+              onClick={() => setIsGroupModalOpen(true)}
+              className="p-2 hover:bg-slate-200 rounded-full transition-all text-slate-500 hover:text-brand"
+              title="Create Group Chat"
+            >
+              <Users className="w-5 h-5" />
+            </button>
+            <button
               onClick={onLogout}
               className="p-2 hover:bg-slate-200 rounded-full transition-all hover:text-red-500"
             >
@@ -461,6 +471,10 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
                         src={s.otherUser.profileImage}
                         className="w-full h-full object-cover"
                       />
+                    ) : s.isGroup ? (
+                      <div className="w-full h-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                        <Users className="w-5.5 h-5.5" />
+                      </div>
                     ) : (
                       <div className="w-full h-full bg-brand/5 text-brand flex items-center justify-center">
                         {s.name[0].toUpperCase()}
@@ -474,7 +488,7 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
                           {s.name}
                         </p>
                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">
-                          @{s.otherUser?.username || "user"}
+                          {s.isGroup ? "Group Chat" : `@${s.otherUser?.username || "user"}`}
                         </p>
                       </div>
                       <span className="text-[11px] text-slate-400 font-medium shrink-0 pt-1">
@@ -565,6 +579,13 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
           </div>
         </div>
       </main>
+      <GroupCreateModal
+        isOpen={isGroupModalOpen}
+        onClose={() => setIsGroupModalOpen(false)}
+        onCreateSuccess={(newGroup) => {
+          navigate(`/chat/${newGroup._id}`);
+        }}
+      />
     </div>
   );
 }
