@@ -25,7 +25,7 @@ app = FastAPI(title="Biz Insights Multilingual Translator API", strict_slashes=F
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=r"https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -51,7 +51,7 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"message": "An internal server error occurred.", "detail": str(exc)},
     )
 
-from routes import auth, users, sessions, upload, contact
+from routes import auth, users, sessions, upload, contact, admin
 
 # Routes
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
@@ -59,6 +59,7 @@ app.include_router(users.router, prefix="/api/users", tags=["users"])
 app.include_router(sessions.router, prefix="/api/sessions", tags=["sessions"])
 app.include_router(upload.router, prefix="/api/upload", tags=["upload"])
 app.include_router(contact.router, prefix="/api/contact", tags=["contact"])
+app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 
 # Static Files - Serving the public/uploads directory
 if not os.path.exists("public/uploads"):
@@ -171,7 +172,7 @@ async def send_message(sid, data):
         translations_map = {from_lang: text} # Include sender's language
         
         try:
-            from database import users_collection
+            from database import users_collection, activity_logs
             session_doc = await sessions_collection.find_one({"_id": ObjectId(session_id)})
             
             if session_doc:
@@ -206,6 +207,21 @@ async def send_message(sid, data):
                                 {"_id": ObjectId(message_id)},
                                 {"$set": {f"translations.{target_lang}": translated_text}}
                             )
+
+                            # Log translation activity
+                            try:
+                                await activity_logs.insert_one({
+                                    "userId": str(user_id),
+                                    "action": "translation",
+                                    "metadata": {
+                                        "messageId": message_id,
+                                        "fromLang": from_lang,
+                                        "targetLang": target_lang
+                                    },
+                                    "createdAt": datetime.utcnow()
+                                })
+                            except Exception as log_err:
+                                logger.error(f"Failed to log translation: {log_err}")
         except Exception as trans_err:
             logger.error(f"Server-side translation failed: {trans_err}")
 

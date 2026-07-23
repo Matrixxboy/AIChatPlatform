@@ -96,6 +96,23 @@ async def upload_file(
     finally:
         await file.close()
 
+    # Log upload activity
+    try:
+        from database import activity_logs
+        from datetime import datetime
+        await activity_logs.insert_one({
+            "userId": current_user_id,
+            "action": "upload",
+            "metadata": {
+                "filename": filename,
+                "size": file_size,
+                "type": file.content_type
+            },
+            "createdAt": datetime.utcnow()
+        })
+    except Exception as log_err:
+        logger.error(f"Failed to log upload activity: {log_err}")
+
     # Return file metadata - matching your production structure
     file_url = f"{BASE_URI}/ai-chat-platform/public/uploads/{unique_filename}"
 

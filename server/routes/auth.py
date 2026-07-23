@@ -1,6 +1,7 @@
+from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends, status
 from models import UserCreate, UserResponse
-from database import users_collection
+from database import users_collection, activity_logs
 from utils.auth import get_password_hash, verify_password, create_access_token, create_refresh_token, decode_refresh_token
 from bson import ObjectId
 
@@ -20,9 +21,20 @@ async def register(user_data: UserCreate):
     user_dict = user_data.dict()
     user_dict["username"] = user_dict["username"].lower()
     user_dict["password"] = hashed_password
+    user_dict["isBlocked"] = False
+    user_dict["isDeleted"] = False
+    user_dict["createdAt"] = datetime.utcnow()
     
     result = await users_collection.insert_one(user_dict)
     user_id = str(result.inserted_id)
+    
+    # Log registration activity
+    await activity_logs.insert_one({
+        "userId": user_id,
+        "action": "register",
+        "metadata": {},
+        "createdAt": datetime.utcnow()
+    })
     
     # Generate tokens
     token = create_access_token(data={"userId": user_id})
@@ -51,12 +63,40 @@ async def login(user_data: dict):
     if not user:
         raise HTTPException(status_code=400, detail="Invalid credentials")
     
+    if user.get("isDeleted"):
+        raise HTTPException(status_code=400, detail="Invalid credentials")
+        
+    if user.get("isBlocked"):
+        reason = user.get("blockReason", "No reason provided")
+        raise HTTPException(
+            status_code=403,
+            detail=f"Your account is blocked. Reason: {reason}"
+        )
+        
     if not verify_password(password, user["password"]):
         raise HTTPException(status_code=400, detail="Invalid credentials")
     
     user_id = str(user["_id"])
+    
+    # Update last login details
+    await users_collection.update_one(
+        {"_id": user["_id"]},
+        {"$set": {
+            "lastLogin": datetime.utcnow(),
+            "lastSeen": datetime.utcnow()
+        }}
+    )
+    
     token = create_access_token(data={"userId": user_id})
     refresh_token = create_refresh_token(data={"userId": user_id})
+    
+    # Log login activity
+    await activity_logs.insert_one({
+        "userId": user_id,
+        "action": "login",
+        "metadata": {},
+        "createdAt": datetime.utcnow()
+    })
     
     return {
         "token": token,
