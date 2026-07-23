@@ -11,10 +11,10 @@ import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import ChatRoom from "./pages/ChatRoom";
-import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
 import io from "socket.io-client";
 import { Globe } from "lucide-react";
+import { Toaster } from "./components/AdminComponents";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -28,11 +28,7 @@ function App() {
     if (!socket) return;
 
     const handleMessage = (msg) => {
-      // Don't notify if it's my own message
       if (msg.senderId === user?.id) return;
-
-      // Don't notify if we are already in the chat room (optional, but cleaner)
-      // For now, let's always notify to be safe, or we'd need to track current route
 
       setNotifications((prev) => [
         ...prev,
@@ -76,7 +72,6 @@ function App() {
     setLoading(false);
   }, []);
 
-  // Separate effect for socket cleanup
   useEffect(() => {
     return () => {
       if (socket) {
@@ -86,17 +81,15 @@ function App() {
     };
   }, [socket]);
 
-  // Effect for force logout
   useEffect(() => {
     const onForceLogout = () => {
       handleLogout();
     };
     window.addEventListener("force-logout", onForceLogout);
     return () => window.removeEventListener("force-logout", onForceLogout);
-  }, [socket]); // depend on socket so handleLogout can close it
+  }, [socket]);
 
   const handleLogin = (userData, token, refreshToken) => {
-    // Close old socket if exists
     if (socket) {
       socket.close();
     }
@@ -217,26 +210,37 @@ function App() {
             }
           />
           <Route
-            path="/admin-login"
+            path="/admin/dashboard"
             element={
-              !user || user.role !== "admin" ? (
-                <AdminLogin onLogin={handleLogin} />
+              user && user.role === "admin" ? (
+                <AdminDashboard user={user} onLogout={handleLogout} tab="overview" />
               ) : (
-                <Navigate to="/admin/dashboard" />
+                <Navigate to="/login" />
               )
             }
           />
           <Route
-            path="/admin/dashboard"
+            path="/admin/users"
             element={
               user && user.role === "admin" ? (
-                <AdminDashboard user={user} onLogout={handleLogout} />
+                <AdminDashboard user={user} onLogout={handleLogout} tab="users" />
               ) : (
-                <Navigate to="/admin-login" />
+                <Navigate to="/login" />
+              )
+            }
+          />
+          <Route
+            path="/admin/contacts"
+            element={
+              user && user.role === "admin" ? (
+                <AdminDashboard user={user} onLogout={handleLogout} tab="contacts" />
+              ) : (
+                <Navigate to="/login" />
               )
             }
           />
         </Routes>
+        <Toaster />
       </div>
     </Router>
   );

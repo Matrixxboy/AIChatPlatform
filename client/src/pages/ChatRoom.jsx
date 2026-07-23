@@ -59,6 +59,7 @@ function ChatRoom({ user, onUserUpdate, socket }) {
   const { sessionId } = useParams();
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
+  const textareaRef = useRef(null);
   const [messages, setMessages] = useState(() => {
     const cached = localStorage.getItem(`cached_messages_${sessionId}`);
     return cached ? JSON.parse(cached) : [];
@@ -98,6 +99,22 @@ function ChatRoom({ user, onUserUpdate, socket }) {
   useEffect(() => {
     localStorage.setItem("pref_myLang", myLang);
   }, [myLang]);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = "auto";
+      const newHeight = Math.max(Math.min(textarea.scrollHeight, 120), 36);
+      textarea.style.height = `${newHeight}px`;
+    }
+  }, [inputText]);
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage(e);
+    }
+  };
 
   const handleLanguageChangeRequest = async (newLang) => {
     if (newLang === myLang) return;
@@ -921,61 +938,68 @@ function ChatRoom({ user, onUserUpdate, socket }) {
             )}
           </AnimatePresence>
 
-          <form
-            onSubmit={handleSendMessage}
-            className="flex items-center gap-3"
-          >
-            <div className="flex gap-1">
-              {/* Hidden File Input */}
-              <input
-                type="file"
-                ref={fileInputRef}
-                className="hidden"
-                onChange={handleFileSelect}
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current.click()}
-                className="p-2.5 text-slate-500 hover:bg-slate-200/50 rounded-full transition-all"
-                title="Send a file"
-              >
-                <Plus className="w-6 h-6" />
-              </button>
-              {/* <button
-                type="button"
-                className="p-2.5 hover:bg-slate-200/50 rounded-full text-slate-500 transition-all"
-              >
-                <Sparkles className="w-6 h-6" />
-              </button> */}
-              <button
-                type="button"
-                onClick={toggleRecording}
-                className={`p-2.5 rounded-full transition-all ${isRecording ? "text-red-500 bg-red-50" : "text-slate-500 hover:bg-slate-200/50"}`}
-              >
-                <Mic className="w-6 h-6" />
-              </button>
+          <form onSubmit={handleSendMessage} className="flex items-end gap-2.5">
+            {/* Left Capsule containing Attachment, Mic and Textarea */}
+            <div className="flex-1 bg-white rounded-[24px] pl-2 pr-3 py-1 flex items-end gap-2 shadow-sm border border-slate-200/50 min-w-0">
+              {/* Voice Mic inside the capsule (Left) - aligned with the first line */}
+              <div className="h-[36px] flex items-center shrink-0">
+                <button
+                  type="button"
+                  onClick={toggleRecording}
+                  className={`p-1.5 rounded-full transition-all shrink-0 ${
+                    isRecording
+                      ? "text-red-500 bg-red-55"
+                      : "text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  <Mic className="w-5.5 h-5.5" />
+                </button>
+              </div>
+
+              {/* Textarea (Center) */}
+              <div className="flex-1 min-w-0">
+                <textarea
+                  ref={textareaRef}
+                  rows={1}
+                  placeholder="Type a message"
+                  className="w-full bg-transparent border-none p-0 py-2 text-[15px] focus:ring-0 outline-none resize-none max-h-[120px] overflow-y-auto leading-[20px] text-slate-800 placeholder:text-slate-400 block"
+                  value={inputText}
+                  onChange={handleTextChange}
+                  onKeyDown={handleKeyDown}
+                  style={{ height: "36px" }}
+                />
+              </div>
+
+              {/* Attachment Button inside the capsule (Right) - aligned with the first line */}
+              <div className="h-[36px] flex items-center shrink-0">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  className="hidden"
+                  onChange={handleFileSelect}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current.click()}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all"
+                  title="Attach file"
+                >
+                  <Plus className="w-5.5 h-5.5" />
+                </button>
+              </div>
             </div>
 
-            <div className="flex-1">
-              <input
-                type="text"
-                placeholder="Type a message"
-                className="w-full bg-white border-none rounded-xl px-5 py-3 text-[15px] focus:ring-0 transition-all outline-none shadow-sm placeholder:text-slate-400"
-                value={inputText}
-                onChange={handleTextChange}
-              />
-            </div>
-
+            {/* Send/Submit Circular Button (Right) */}
             <button
               type="submit"
-              disabled={!inputText.trim()}
-              className={`w-12 h-12 flex items-center justify-center rounded-full shadow-md transition-all ${
-                inputText.trim()
-                  ? "bg-brand text-white scale-105 active:scale-95"
-                  : "bg-white text-slate-300"
+              disabled={!inputText.trim() && !attachedFile}
+              className={`w-11 h-11 flex items-center justify-center rounded-full shadow-md shrink-0 transition-all cursor-pointer ${
+                inputText.trim() || attachedFile
+                  ? "bg-brand text-white hover:scale-105 active:scale-95"
+                  : "bg-white text-slate-350 border border-slate-200"
               }`}
             >
-              <Send className="w-5 h-5 ml-0.5" />
+              <Send className="w-5 h-5" />
             </button>
           </form>
         </div>
@@ -996,7 +1020,7 @@ function ChatRoom({ user, onUserUpdate, socket }) {
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="bg-white rounded-2xl p-6 shadow-2xl max-w-md w-full relative z-10"
+              className="bg-white rounded-2xl p-6 shadow-2xl max-w-4xl w-full relative z-10"
             >
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
@@ -1011,7 +1035,7 @@ function ChatRoom({ user, onUserUpdate, socket }) {
                 </button>
               </div>
 
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 mb-4 max-h-[40vh] overflow-y-auto">
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 mb-4 max-h-[60vh] overflow-y-auto">
                 <p className="text-slate-800 leading-relaxed whitespace-pre-wrap">
                   {originalMsgView.text}
                 </p>
