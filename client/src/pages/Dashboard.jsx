@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api";
 import {
@@ -8,6 +8,7 @@ import {
   LogOut,
   UserPlus,
   Bell,
+  BellOff,
   Settings,
   MoreHorizontal,
   Globe,
@@ -33,12 +34,18 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
   const [isSearching, setIsSearching] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
+  const [notifStatus, setNotifStatus] = useState(() => {
+    if (!("Notification" in window)) return "unsupported";
+    return Notification.permission; // "granted", "denied", or "default"
+  });
+  const [isTogglingNotif, setIsTogglingNotif] = useState(false);
   const [myLang, setMyLang] = useState(
     () =>
       user.preferredLanguage ||
       localStorage.getItem("pref_myLang") ||
       "English",
   );
+  const [activeTab, setActiveTab] = useState("users");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -74,6 +81,7 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
               ...s,
               lastMessage: data.lastMessage,
               lastMessageTime: data.lastMessageTime,
+              unreadCount: (s.unreadCount || 0) + 1,
             };
           }
           return s;
@@ -94,6 +102,73 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
       socket.off("session_update", handleSessionUpdate);
     };
   }, [socket, user.id]);
+
+  // --- Push Notification Helpers ---
+  function urlBase64ToUint8Array(base64String) {
+    const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/\-/g, "+").replace(/_/g, "/");
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+    return outputArray;
+  }
+
+  const subscribeToPush = useCallback(async () => {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    setIsTogglingNotif(true);
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        setNotifStatus("denied");
+        return;
+      }
+      const keyRes = await api.get("/api/users/vapid-public-key");
+      const publicVapidKey = keyRes.data.publicKey;
+      if (!publicVapidKey) return;
+      const convertedVapidKey = urlBase64ToUint8Array(publicVapidKey);
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: convertedVapidKey,
+        });
+      }
+      await api.post("/api/users/push-subscription", subscription);
+      setNotifStatus("granted");
+      console.log("Push notifications enabled.");
+    } catch (err) {
+      console.error("Error enabling push notifications:", err);
+    } finally {
+      setIsTogglingNotif(false);
+    }
+  }, []);
+
+  const unsubscribeFromPush = useCallback(async () => {
+    if (!("serviceWorker" in navigator)) return;
+    setIsTogglingNotif(true);
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      if (subscription) {
+        await api.post("/api/users/push-subscription/unsubscribe", subscription);
+        await subscription.unsubscribe();
+      }
+      setNotifStatus("default");
+      console.log("Push notifications disabled.");
+    } catch (err) {
+      console.error("Error disabling push notifications:", err);
+    } finally {
+      setIsTogglingNotif(false);
+    }
+  }, []);
+
+  // Auto-subscribe on load if permission already granted
+  useEffect(() => {
+    if (Notification.permission === "granted") {
+      subscribeToPush();
+    }
+  }, []);
 
   const fetchSessions = async () => {
     setIsFetching(true);
@@ -187,6 +262,11 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
     };
     reader.readAsDataURL(file);
   };
+
+  const userSessions = sessions.filter((s) => !s.isGroup);
+  const groupSessions = sessions.filter((s) => s.isGroup);
+
+  const filteredSessions = activeTab === "users" ? userSessions : groupSessions;
 
   return (
     <div className="flex h-screen bg-[#f0f2f5] overflow-hidden font-sans relative">
@@ -306,6 +386,64 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
                   <p className="text-slate-800 text-lg font-medium">{myLang}</p>
                 </div>
               </div>
+
+              {/* Notification Toggle */}
+              <div className="bg-white px-8 py-6 shadow-sm mt-0 mb-4">
+                <p className="text-brand text-xs font-bold uppercase tracking-widest mb-4">
+                  Push Notifications
+                </p>
+                {notifStatus === "unsupported" ? (
+                  <div className="flex items-center gap-3 text-slate-400">
+                    <BellOff className="w-5 h-5" />
+                    <p className="text-sm font-medium">Not supported in this browser</p>
+                  </div>
+                ) : notifStatus === "denied" ? (
+                  <div className="flex items-start gap-3">
+                    <BellOff className="w-5 h-5 text-red-400 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">Notifications blocked</p>
+                      <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                        You blocked notifications in your browser. To enable them, click the lock icon in your browser's address bar and allow notifications.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      {notifStatus === "granted" ? (
+                        <Bell className="w-5 h-5 text-emerald-500" />
+                      ) : (
+                        <BellOff className="w-5 h-5 text-slate-400" />
+                      )}
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">
+                          {notifStatus === "granted" ? "Notifications On" : "Notifications Off"}
+                        </p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          {notifStatus === "granted"
+                            ? "You'll get alerts for new messages"
+                            : "Enable to receive message alerts"}
+                        </p>
+                      </div>
+                    </div>
+                    {/* Toggle Switch */}
+                    <button
+                      onClick={notifStatus === "granted" ? unsubscribeFromPush : subscribeToPush}
+                      disabled={isTogglingNotif}
+                      className={`relative w-12 h-6 rounded-full transition-all duration-300 focus:outline-none ${
+                        notifStatus === "granted" ? "bg-emerald-500" : "bg-slate-300"
+                      } ${isTogglingNotif ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                      title={notifStatus === "granted" ? "Turn off notifications" : "Turn on notifications"}
+                    >
+                      <span
+                        className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-300 ${
+                          notifStatus === "granted" ? "translate-x-6" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </motion.div>
         )}
@@ -414,6 +552,34 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
           </div>
         </div>
 
+        {searchQuery.trim().length < 2 && (
+          <div className="sticky top-0 z-10 bg-white border-b border-slate-100">
+            <div className="flex">
+              <button
+                onClick={() => setActiveTab("users")}
+                className={`flex-1 py-3 text-sm font-semibold transition-all border-b-2 ${
+                  activeTab === "users"
+                    ? "border-brand text-brand bg-brand/5"
+                    : "border-transparent text-slate-500 hover:bg-slate-50"
+                }`}
+              >
+                Users ({userSessions.length})
+              </button>
+
+              <button
+                onClick={() => setActiveTab("groups")}
+                className={`flex-1 py-3 text-sm font-semibold transition-all border-b-2 ${
+                  activeTab === "groups"
+                    ? "border-brand text-brand bg-brand/5"
+                    : "border-transparent text-slate-500 hover:bg-slate-50"
+                }`}
+              >
+                Groups ({groupSessions.length})
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Session List */}
         <div className="flex-1 overflow-y-auto custom-scrollbar">
           {isFetching && (
@@ -459,7 +625,7 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
             </div>
           ) : (
             <div>
-              {sessions.map((s) => (
+              {filteredSessions.map((s) => (
                 <div
                   key={s._id}
                   onClick={() => navigate(`/chat/${s._id}`)}
@@ -484,30 +650,40 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
                   <div className="flex-1 min-w-0 border-b border-slate-100 py-2 group-last:border-0 relative">
                     <div className="flex justify-between items-start mb-0.5">
                       <div className="flex flex-col min-w-0">
-                        <p className="font-bold text-[15px] text-slate-900 truncate">
+                        <p className={`text-[15px] truncate ${s.unreadCount > 0 ? "text-slate-950 font-black" : "text-slate-800 font-bold"}`}>
                           {s.name}
                         </p>
                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">
-                          {s.isGroup ? "Group Chat" : `@${s.otherUser?.username || "user"}`}
+                          {s.isGroup
+                            ? "Group Chat"
+                            : `@${s.otherUser?.username || "user"}`}
                         </p>
                       </div>
-                      <span className="text-[11px] text-slate-400 font-medium shrink-0 pt-1">
+                      <span className={`text-[11px] shrink-0 pt-1 ${s.unreadCount > 0 ? "text-emerald-500 font-black" : "text-slate-400 font-medium"}`}>
                         {formatLastMessageTime(s.lastMessageTime)}
                       </span>
                     </div>
                     <div className="flex justify-between items-center gap-2">
-                      <p className="text-sm text-slate-500 truncate leading-tight pr-4">
+                      <p className={`text-sm truncate leading-tight pr-4 ${s.unreadCount > 0 ? "text-slate-900 font-bold" : "text-slate-500"}`}>
                         {s.lastMessage || "Click to open chat..."}
                       </p>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setIsDeleting(s._id);
-                        }}
-                        className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-all"
-                      >
-                        <LogOut className="w-3.5 h-3.5" />
-                      </button>
+                      
+                      <div className="flex items-center gap-2 shrink-0">
+                        {s.unreadCount > 0 && (
+                          <span className="min-w-[18px] h-[18px] bg-emerald-500 text-white rounded-full flex items-center justify-center text-[9px] font-black px-1.5 shadow-sm">
+                            {s.unreadCount}
+                          </span>
+                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setIsDeleting(s._id);
+                          }}
+                          className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                        >
+                          <LogOut className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>

@@ -3,25 +3,74 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { AlertTriangle, X } from "lucide-react";
 
-// Tooltip Component using React Portal to prevent layout clipping and scroll inheritance
-export function Tooltip({ children, content }) {
+export function Tooltip({ children, content, placement = "top", offset = 8 }) {
   const [show, setShow] = useState(false);
   const [coords, setCoords] = useState({ top: 0, left: 0 });
 
   const handleMouseEnter = (e) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    setCoords({
-      top: rect.top + window.scrollY - 8, // 8px spacing above target element
-      left: rect.left + window.scrollX + rect.width / 2
-    });
+
+    switch (placement) {
+      case "bottom":
+        setCoords({
+          top: rect.bottom + window.scrollY + offset,
+          left: rect.left + window.scrollX + rect.width / 2,
+        });
+        break;
+
+      case "left":
+        setCoords({
+          top: rect.top + window.scrollY + rect.height / 2,
+          left: rect.left + window.scrollX - offset,
+        });
+        break;
+
+      case "right":
+        setCoords({
+          top: rect.top + window.scrollY + rect.height / 2,
+          left: rect.right + window.scrollX + offset,
+        });
+        break;
+
+      case "top":
+      default:
+        setCoords({
+          top: rect.top + window.scrollY - offset,
+          left: rect.left + window.scrollX + rect.width / 2,
+        });
+    }
+
     setShow(true);
   };
 
-  const handleMouseLeave = () => {
-    setShow(false);
-  };
+  const handleMouseLeave = () => setShow(false);
 
   if (!content) return children;
+
+  const placementStyles = {
+    top: {
+      transform: "translate(-50%, -100%)",
+      arrow:
+        "absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900",
+    },
+    bottom: {
+      transform: "translate(-50%, 0)",
+      arrow:
+        "absolute bottom-full left-1/2 -translate-x-1/2 border-4 border-transparent border-b-slate-900",
+    },
+    left: {
+      transform: "translate(-100%, -50%)",
+      arrow:
+        "absolute left-full top-1/2 -translate-y-1/2 border-4 border-transparent border-l-slate-900",
+    },
+    right: {
+      transform: "translate(0, -50%)",
+      arrow:
+        "absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-slate-900",
+    },
+  };
+
+  const current = placementStyles[placement];
 
   return (
     <>
@@ -32,26 +81,26 @@ export function Tooltip({ children, content }) {
       >
         {children}
       </div>
+
       {show &&
         createPortal(
           <div
             style={{
               position: "absolute",
-              top: `${coords.top}px`,
-              left: `${coords.left}px`,
-              transform: "translate(-50%, -100%)",
+              top: coords.top,
+              left: coords.left,
+              transform: current.transform,
             }}
             className="px-2.5 py-1 text-[10px] font-bold text-white bg-slate-900 rounded shadow-md whitespace-nowrap z-[99999] pointer-events-none animate-in fade-in zoom-in-95 duration-100"
           >
             {content}
-            <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900"></div>
+            <div className={current.arrow}></div>
           </div>,
-          document.body
+          document.body,
         )}
     </>
   );
 }
-
 // Confirmation Dialog Component
 export function ConfirmDialog({
   isOpen,
@@ -61,7 +110,7 @@ export function ConfirmDialog({
   onCancel,
   confirmText = "Confirm",
   cancelText = "Cancel",
-  type = "danger"
+  type = "danger",
 }) {
   if (!isOpen) return null;
   return (
@@ -161,19 +210,19 @@ let toastListeners = [];
 export const toast = {
   success: (message) => {
     toastListeners.forEach((listener) =>
-      listener({ id: Date.now() + Math.random(), type: "success", message })
+      listener({ id: Date.now() + Math.random(), type: "success", message }),
     );
   },
   error: (message) => {
     toastListeners.forEach((listener) =>
-      listener({ id: Date.now() + Math.random(), type: "error", message })
+      listener({ id: Date.now() + Math.random(), type: "error", message }),
     );
   },
   info: (message) => {
     toastListeners.forEach((listener) =>
-      listener({ id: Date.now() + Math.random(), type: "info", message })
+      listener({ id: Date.now() + Math.random(), type: "info", message }),
     );
-  }
+  },
 };
 
 export function Toaster() {
@@ -205,8 +254,8 @@ export function Toaster() {
               t.type === "success"
                 ? "bg-emerald-50 text-emerald-800 border-emerald-100"
                 : t.type === "error"
-                ? "bg-rose-50 text-rose-800 border-rose-100"
-                : "bg-blue-50 text-blue-800 border-blue-100"
+                  ? "bg-rose-50 text-rose-800 border-rose-100"
+                  : "bg-blue-50 text-blue-800 border-blue-100"
             }`}
           >
             <div
@@ -214,8 +263,8 @@ export function Toaster() {
                 t.type === "success"
                   ? "bg-emerald-500"
                   : t.type === "error"
-                  ? "bg-rose-500"
-                  : "bg-blue-500"
+                    ? "bg-rose-500"
+                    : "bg-blue-500"
               }`}
             ></div>
             <span>{t.message}</span>

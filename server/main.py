@@ -1,3 +1,10 @@
+import sys
+# Reconfigure standard streams to prevent Windows console UnicodeEncodeErrors
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
 import uvicorn
 from fastapi import FastAPI, Request, Response, Depends
 from fastapi.responses import JSONResponse
@@ -14,6 +21,8 @@ import logging
 import time
 from fastapi.staticfiles import StaticFiles
 import os
+import asyncio
+
 
 # Setup Logging
 logging.basicConfig(level=logging.INFO)
@@ -100,10 +109,25 @@ async def connect(sid, environ, auth):
 
 @sio.on('join_session')
 async def join_session(sid, sessionId):
-    session = await sio.get_session(sid)
-    user_id = session.get("userId")
+    session_data = await sio.get_session(sid)
+    user_id = session_data.get("userId") if session_data else None
     await sio.enter_room(sid, sessionId)
     logger.info(f"User {user_id} joined room: {sessionId}")
+    
+    if user_id and sessionId:
+        try:
+            # 1. Update all messages in this session NOT sent by current user to status "seen"
+            await messages_collection.update_many(
+                {"sessionId": str(sessionId), "senderId": {"$ne": str(user_id)}, "status": {"$ne": "seen"}},
+                {"$set": {"status": "seen", "seenAt": datetime.utcnow()}}
+            )
+            # 2. Emit status update event to the room so sender gets real-time checkmark updates
+            await sio.emit('session_messages_seen', {
+                "sessionId": str(sessionId),
+                "seenBy": str(user_id)
+            }, room=str(sessionId))
+        except Exception as e:
+            logger.error(f"Error marking messages seen on join_session: {e}")
 
 @sio.on('join_user_room')
 async def join_user_room(sid, data):
@@ -204,6 +228,8 @@ async def send_message(sid, data):
                         res = await translate(text, from_lang, target_lang, domain)
                         if res and "translation" in res:
                             translations_cache[target_lang] = res["translation"]
+                            input_tokens = res.get("input_tokens", 0)
+                            output_tokens = res.get("output_tokens", 0)
                             
                             # Log translation activity
                             try:
@@ -213,7 +239,9 @@ async def send_message(sid, data):
                                     "metadata": {
                                         "messageId": message_id,
                                         "fromLang": from_lang,
-                                        "targetLang": target_lang
+                                        "targetLang": target_lang,
+                                        "inputTokens": input_tokens,
+                                        "outputTokens": output_tokens
                                     },
                                     "createdAt": datetime.utcnow()
                                 })
@@ -284,6 +312,24 @@ async def send_message(sid, data):
         # 5. Broadcast
         await sio.emit('receive_message', new_message, room=session_id)
         
+        # 5b. Web Push Notifications (Run in background)
+        if session_doc:
+            session_name = session_doc.get("groupName") or "New Chat"
+            is_group = bool(session_doc.get("isGroup", False))
+            participants = session_doc.get("participants", [])
+            asyncio.create_task(
+                trigger_push_notifications(
+                    sender_name=new_message.get("senderName", "User"),
+                    session_name=session_name,
+                    session_id=str(session_id),
+                    is_group=is_group,
+                    message_text=text,
+                    participants=participants,
+                    sender_id=str(user_id),
+                    translations_map=translations_map
+                )
+            )
+        
         # 6. Dashboard Updates
         if session_doc:
             for p_id in session_doc.get("participants", []):
@@ -335,6 +381,64 @@ async def stop_typing(sid, data):
 @sio.on('disconnect')
 async def disconnect(sid):
     logger.info(f"User disconnected: {sid}")
+
+async def trigger_push_notifications(sender_name: str, session_name: str, session_id: str, is_group: bool, message_text: str, participants: list, sender_id: str, translations_map: dict):
+    from database import users_collection
+    import json
+    from pywebpush import webpush, WebPushException
+    
+    for p_id in participants:
+        p_id_str = str(p_id)
+        if p_id_str == str(sender_id):
+            continue
+            
+        user_doc = await users_collection.find_one({"_id": ObjectId(p_id_str)})
+        if not user_doc or "pushSubscriptions" not in user_doc:
+            continue
+            
+        subscriptions = user_doc.get("pushSubscriptions", [])
+        if not subscriptions:
+            continue
+            
+        pref_lang = user_doc.get("preferredLanguage", "English")
+        body_text = translations_map.get(pref_lang, message_text)
+        
+        title = session_name if (is_group and session_name) else sender_name
+        body = f"{sender_name}: {body_text}" if is_group else body_text
+        
+        payload = {
+            "title": title,
+            "body": body,
+            "icon": f"{settings.FRONTEND_URL.rstrip('/')}/logo192.png",
+            "badge": f"{settings.FRONTEND_URL.rstrip('/')}/logo192.png",
+            "data": {
+                "sessionId": str(session_id),
+                "url": f"{settings.FRONTEND_URL.rstrip('/')}/chat/{session_id}"
+            }
+        }
+        
+        expired_endpoints = []
+        for sub in subscriptions:
+            try:
+                await asyncio.to_thread(
+                    webpush,
+                    subscription_info=sub,
+                    data=json.dumps(payload),
+                    vapid_private_key=settings.VAPID_PRIVATE_KEY,
+                    vapid_claims={"sub": settings.VAPID_ADMIN_EMAIL}
+                )
+            except WebPushException as ex:
+                logger.warning(f"WebPush Exception for user {p_id_str}: {ex}")
+                if ex.response is not None and ex.response.status_code in [404, 410]:
+                    expired_endpoints.append(sub.get("endpoint"))
+            except Exception as e:
+                logger.error(f"Failed to send push: {e}")
+                
+        if expired_endpoints:
+            await users_collection.update_one(
+                {"_id": ObjectId(p_id_str)},
+                {"$pull": {"pushSubscriptions": {"endpoint": {"$in": expired_endpoints}}}}
+            )
 
 if __name__ == "__main__":
     uvicorn.run("main:socket_app", host="0.0.0.0", port=settings.PORT, reload=True)

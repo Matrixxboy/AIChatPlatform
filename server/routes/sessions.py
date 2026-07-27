@@ -147,6 +147,13 @@ async def get_sessions(current_user_id: str = Depends(get_current_user_id)):
         global_sess = await sessions_collection.find_one({"_id": ObjectId(sess_id)})
         if not global_sess: continue
         
+        # Count unread messages in this session
+        unread_count = await messages_collection.count_documents({
+            "sessionId": sess_id,
+            "senderId": {"$ne": current_user_id},
+            "status": {"$ne": "seen"}
+        })
+        
         # Check if it is a group session
         if global_sess.get("isGroup") or user_sess.get("isGroup"):
             sessions.append({
@@ -157,6 +164,7 @@ async def get_sessions(current_user_id: str = Depends(get_current_user_id)):
                 "lastMessageTime": global_sess.get("lastMessageTime"),
                 "participants": [str(p) for p in global_sess.get("participants", [])],
                 "admins": [str(a) for a in global_sess.get("admins", [])],
+                "unreadCount": unread_count,
                 "otherUser": None
             })
             continue
@@ -177,6 +185,7 @@ async def get_sessions(current_user_id: str = Depends(get_current_user_id)):
             "name": other_user.get("fullName") or other_user.get("name") if other_user else "Unknown User",
             "lastMessage": global_sess.get("lastMessage"),
             "lastMessageTime": global_sess.get("lastMessageTime"),
+            "unreadCount": unread_count,
             "otherUser": {
                 "_id": str(other_user_id),
                 "name": other_user.get("fullName") or other_user.get("name") if other_user else "Unknown",
@@ -194,12 +203,23 @@ async def get_messages(session_id: str, current_user_id: str = Depends(get_curre
         "sessionId": session_id
     })
     
-    # If no reference, user has no access - fulfilling "independent ownership"
-    if not user_sess or user_sess.get("isDeleted"):
-        # We don't raise 404 here to allow "empty" view if they just deleted it but session exists
-        delete_timestamp = datetime.utcnow() # Treat as fully deleted
-    else:
+    # Check if user is in the session even without a user_session reference (group or old sessions)
+    global_sess = await sessions_collection.find_one({"_id": ObjectId(session_id)})
+    
+    if user_sess and user_sess.get("isDeleted"):
+        # User explicitly deleted their copy - show nothing
+        delete_timestamp = datetime.utcnow()
+    elif user_sess:
         delete_timestamp = user_sess.get("deletedAt", datetime(1970, 1, 1))
+    elif global_sess:
+        # No user_sess record yet but session exists - check if user is a participant
+        participants = [str(p) for p in global_sess.get("participants", [])]
+        if current_user_id in participants:
+            delete_timestamp = datetime(1970, 1, 1)  # Show all messages
+        else:
+            delete_timestamp = datetime.utcnow()  # Not a participant - show nothing
+    else:
+        delete_timestamp = datetime.utcnow()  # Session doesn't exist
 
     # 2. Fetch messages created AFTER the user's individual delete timestamp
     cursor = messages_collection.find({
@@ -209,30 +229,32 @@ async def get_messages(session_id: str, current_user_id: str = Depends(get_curre
     
     # Get current user's translations to merge
     user = await users_collection.find_one({"_id": ObjectId(current_user_id)})
-    user_translations = user.get("translations", {})
+    user_translations = user.get("translations", {}) if user else {}
 
     messages = []
     async for msg in cursor:
         msg_id = str(msg["_id"])
         msg["_id"] = msg_id
-        msg["senderId"] = str(msg["senderId"])
-        msg["sessionId"] = str(msg["sessionId"])
         
-        # Populate senderName and profileImage
-        if msg.get("senderId") == "system":
+        sender_id_str = str(msg.get("senderId", ""))
+        msg["senderId"] = sender_id_str
+        msg["sessionId"] = str(msg.get("sessionId", ""))
+        
+        # Populate senderName and profileImage safely
+        if sender_id_str == "system" or not ObjectId.is_valid(sender_id_str):
             msg["senderName"] = "System"
             msg["senderProfileImage"] = ""
         else:
-            sender_doc = await users_collection.find_one({"_id": ObjectId(msg["senderId"])})
+            sender_doc = await users_collection.find_one({"_id": ObjectId(sender_id_str)})
             msg["senderName"] = sender_doc.get("fullName") or sender_doc.get("name") if sender_doc else "Unknown User"
             msg["senderProfileImage"] = sender_doc.get("profileImage", "") if sender_doc else ""
         
         # Merge translations (shared + private cache)
         shared_translations = msg.get("translations", {})
-        user_specific_translations = user_translations.get(msg_id, {})
+        user_specific_translations = user_translations.get(msg_id, {}) if user_translations else {}
         msg["translations"] = {**shared_translations, **user_specific_translations}
         
-        if str(msg.get("senderId")) == str(current_user_id):
+        if sender_id_str == str(current_user_id):
             msg["translations"][msg.get("fromLang", "English")] = msg.get("originalText")
 
         messages.append(msg)
@@ -372,7 +394,29 @@ async def translate_all_messages(session_id: str, data: dict, current_user_id: s
     for i in range(0, len(missing_messages), chunk_size):
         chunk = missing_messages[i : i + chunk_size]
         try:
-            results = await batch_translate(chunk, to_lang, domain)
+            batch_res = await batch_translate(chunk, to_lang, domain)
+            results = batch_res.get("translations", [])
+            input_tokens = batch_res.get("input_tokens", 0)
+            output_tokens = batch_res.get("output_tokens", 0)
+            
+            # Log translation activity for batch
+            try:
+                from database import activity_logs
+                await activity_logs.insert_one({
+                    "userId": str(current_user_id),
+                    "action": "translation",
+                    "metadata": {
+                        "batchSize": len(chunk),
+                        "targetLang": to_lang,
+                        "inputTokens": input_tokens,
+                        "outputTokens": output_tokens,
+                        "isBatch": True
+                    },
+                    "createdAt": datetime.utcnow()
+                })
+            except Exception as log_err:
+                logger.error(f"Failed to log batch translation activity: {log_err}")
+
             for res in results:
                 msg_id = res.get("id")
                 trans_text = res.get("translation")

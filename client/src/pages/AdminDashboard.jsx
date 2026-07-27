@@ -1171,38 +1171,67 @@ function AdminDashboard({ user, onLogout, tab = "overview" }) {
                 ) : (
                   <>
                     {userStats && (
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-center">
-                          <p className="text-[9px] text-slate-400 font-bold uppercase">
-                            Messages Sent
-                          </p>
-                          <p className="text-base font-black text-slate-900 mt-0.5">
-                            {userStats.messagesSent}
-                          </p>
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-center">
+                            <p className="text-[9px] text-slate-400 font-bold uppercase">
+                              Messages Sent
+                            </p>
+                            <p className="text-base font-black text-slate-900 mt-0.5">
+                              {userStats.messagesSent}
+                            </p>
+                          </div>
+                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-center">
+                            <p className="text-[9px] text-slate-400 font-bold uppercase">
+                              Active Channels
+                            </p>
+                            <p className="text-base font-black text-slate-900 mt-0.5">
+                              {userStats.sessionsCount}
+                            </p>
+                          </div>
+                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-center">
+                            <p className="text-[9px] text-slate-400 font-bold uppercase">
+                              Translations
+                            </p>
+                            <p className="text-base font-black text-slate-900 mt-0.5">
+                              {userStats.translationsCount}
+                            </p>
+                          </div>
+                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-center">
+                            <p className="text-[9px] text-slate-400 font-bold uppercase">
+                              Uploads
+                            </p>
+                            <p className="text-base font-black text-slate-900 mt-0.5">
+                              {userStats.uploadsCount}
+                            </p>
+                          </div>
                         </div>
-                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-center">
-                          <p className="text-[9px] text-slate-400 font-bold uppercase">
-                            Active Channels
-                          </p>
-                          <p className="text-base font-black text-slate-900 mt-0.5">
-                            {userStats.sessionsCount}
-                          </p>
-                        </div>
-                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-center">
-                          <p className="text-[9px] text-slate-400 font-bold uppercase">
-                            Translations
-                          </p>
-                          <p className="text-base font-black text-slate-900 mt-0.5">
-                            {userStats.translationsCount}
-                          </p>
-                        </div>
-                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-center">
-                          <p className="text-[9px] text-slate-400 font-bold uppercase">
-                            Uploads
-                          </p>
-                          <p className="text-base font-black text-slate-900 mt-0.5">
-                            {userStats.uploadsCount}
-                          </p>
+                        
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          <div className="bg-emerald-50/30 p-3 rounded-xl border border-emerald-100/50 text-center">
+                            <p className="text-[9px] text-emerald-600 font-bold uppercase">
+                              AI Input Tokens
+                            </p>
+                            <p className="text-base font-black text-emerald-800 mt-0.5">
+                              {(userStats.inputTokens || 0).toLocaleString()}
+                            </p>
+                          </div>
+                          <div className="bg-emerald-50/30 p-3 rounded-xl border border-emerald-100/50 text-center">
+                            <p className="text-[9px] text-emerald-600 font-bold uppercase">
+                              AI Output Tokens
+                            </p>
+                            <p className="text-base font-black text-emerald-800 mt-0.5">
+                              {(userStats.outputTokens || 0).toLocaleString()}
+                            </p>
+                          </div>
+                          <div className="bg-rose-50/30 p-3 rounded-xl border border-rose-100/50 text-center col-span-2">
+                            <p className="text-[9px] text-rose-600 font-bold uppercase">
+                              Estimated AI Cost (INR)
+                            </p>
+                            <p className="text-base font-black text-rose-800 mt-0.5">
+                              ₹{(userStats.costINR || 0).toFixed(4)}
+                            </p>
+                          </div>
                         </div>
                       </div>
                     )}

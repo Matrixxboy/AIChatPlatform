@@ -70,6 +70,25 @@ async def get_admin_dashboard(current_admin_id: str = Depends(get_current_admin)
     total_messages = await messages_collection.count_documents({})
     total_contacts = await contacts_collection.count_documents({})
     
+    # Calculate overall AI translation token usage and billing
+    pipeline = [
+        {"$match": {"action": "translation"}},
+        {"$group": {
+            "_id": None,
+            "totalInputTokens": {"$sum": {"$ifNull": ["$metadata.inputTokens", 0]}},
+            "totalOutputTokens": {"$sum": {"$ifNull": ["$metadata.outputTokens", 0]}}
+        }}
+    ]
+    cursor = activity_logs.aggregate(pipeline)
+    token_stats = {"totalInputTokens": 0, "totalOutputTokens": 0}
+    async for doc in cursor:
+        token_stats["totalInputTokens"] = doc.get("totalInputTokens", 0)
+        token_stats["totalOutputTokens"] = doc.get("totalOutputTokens", 0)
+        
+    in_cost_usd = (token_stats["totalInputTokens"] * 0.15) / 1000000.0
+    out_cost_usd = (token_stats["totalOutputTokens"] * 0.60) / 1000000.0
+    total_cost_inr = round((in_cost_usd + out_cost_usd) * 95.86, 4)
+    
     return {
         "totalUsers": total_users,
         "activeUsers": active_users,
@@ -78,7 +97,10 @@ async def get_admin_dashboard(current_admin_id: str = Depends(get_current_admin)
         "newUsers": new_users,
         "totalSessions": total_sessions,
         "totalMessages": total_messages,
-        "totalContacts": total_contacts
+        "totalContacts": total_contacts,
+        "totalInputTokens": token_stats["totalInputTokens"],
+        "totalOutputTokens": token_stats["totalOutputTokens"],
+        "totalCostINR": total_cost_inr
     }
 
 # 6. User Management - List Users
@@ -405,11 +427,33 @@ async def get_user_stats(user_id: str, current_admin_id: str = Depends(get_curre
     translations = await activity_logs.count_documents({"userId": user_id, "action": "translation"})
     uploads = await activity_logs.count_documents({"userId": user_id, "action": "upload"})
     
+    # Calculate user's specific token usage and cost
+    pipeline = [
+        {"$match": {"userId": user_id, "action": "translation"}},
+        {"$group": {
+            "_id": None,
+            "totalInputTokens": {"$sum": {"$ifNull": ["$metadata.inputTokens", 0]}},
+            "totalOutputTokens": {"$sum": {"$ifNull": ["$metadata.outputTokens", 0]}}
+        }}
+    ]
+    cursor = activity_logs.aggregate(pipeline)
+    token_stats = {"totalInputTokens": 0, "totalOutputTokens": 0}
+    async for doc in cursor:
+        token_stats["totalInputTokens"] = doc.get("totalInputTokens", 0)
+        token_stats["totalOutputTokens"] = doc.get("totalOutputTokens", 0)
+        
+    in_cost_usd = (token_stats["totalInputTokens"] * 0.15) / 1000000.0
+    out_cost_usd = (token_stats["totalOutputTokens"] * 0.60) / 1000000.0
+    cost_inr = round((in_cost_usd + out_cost_usd) * 95.86, 4)
+    
     return {
         "messagesSent": messages_sent,
         "sessionsCount": sessions_count,
         "translationsCount": translations,
-        "uploadsCount": uploads
+        "uploadsCount": uploads,
+        "inputTokens": token_stats["totalInputTokens"],
+        "outputTokens": token_stats["totalOutputTokens"],
+        "costINR": cost_inr
     }
 
 # 13. Dashboard Analytics

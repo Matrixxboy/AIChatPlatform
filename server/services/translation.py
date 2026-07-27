@@ -95,6 +95,10 @@ Return ONLY a valid JSON object:
             
             response.raise_for_status()
             data = response.json()
+            usage = data.get("usage", {})
+            input_tokens = usage.get("prompt_tokens", 0)
+            output_tokens = usage.get("completion_tokens", 0)
+
             if "choices" not in data or not data["choices"]:
                 logger.error(f"OpenRouter Unexpected Response Structure: {data}")
                 return None
@@ -118,6 +122,8 @@ Return ONLY a valid JSON object:
                     translated_text = translated_text.replace(f"[[URL_{i}]]".lower(), url) # Handle cases where LLM might lowercase the tag
                 
                 parsed["translation"] = translated_text
+                parsed["input_tokens"] = input_tokens
+                parsed["output_tokens"] = output_tokens
                 return parsed
             except Exception as json_err:
                 logger.warning(f"JSON Parsing failed, returning raw content: {json_err}")
@@ -125,7 +131,12 @@ Return ONLY a valid JSON object:
                 # Restore URLs
                 for i, url in enumerate(urls):
                     translated_text = translated_text.replace(f"[[URL_{i}]]", url)
-                return {"translation": translated_text, "confidence": 50}
+                return {
+                    "translation": translated_text, 
+                    "confidence": 50,
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens
+                }
     except Exception as e:
         logger.error(f"OpenRouter Connection/Request Error: {str(e)}")
         return None
@@ -200,23 +211,34 @@ Return ONLY a valid JSON object:
             
             if response.status_code != 200:
                 logger.error(f"OpenRouter Batch Error: {response.status_code}, {response.text}")
-                return []
+                return {"translations": [], "input_tokens": 0, "output_tokens": 0}
                 
             data = response.json()
+            usage = data.get("usage", {})
+            input_tokens = usage.get("prompt_tokens", 0)
+            output_tokens = usage.get("completion_tokens", 0)
+            
             content = data["choices"][0]["message"]["content"]
             
             # Extract JSON
             json_match = re.search(r'\{.*\}', content, re.DOTALL)
+            translations = []
             if json_match:
                 parsed = json.loads(json_match.group())
-                return parsed.get("translations", [])
+                translations = parsed.get("translations", [])
             else:
                 parsed = json.loads(content.strip())
-                return parsed.get("translations", [])
+                translations = parsed.get("translations", [])
+                
+            return {
+                "translations": translations,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens
+            }
                 
     except Exception as e:
         logger.error(f"Batch translation request error: {str(e)}")
-        return []
+        return {"translations": [], "input_tokens": 0, "output_tokens": 0}
 
 async def translate(text, from_lang, to_lang, domain):
     try:
@@ -227,10 +249,12 @@ async def translate(text, from_lang, to_lang, domain):
             return {
                 "translation": text, 
                 "confidence": 0, 
+                "input_tokens": 0,
+                "output_tokens": 0,
                 "error": "Neural Link failed, showing original."
             }
             
         return result
     except Exception as e:
         logger.error(f"Translation logic error: {e}")
-        return {"translation": text, "confidence": 0, "error": str(e)}
+        return {"translation": text, "confidence": 0, "input_tokens": 0, "output_tokens": 0, "error": str(e)}

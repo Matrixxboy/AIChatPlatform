@@ -17,7 +17,7 @@ import {
   Unlock,
   Trash2,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
 } from "lucide-react";
 import { Tooltip, StatusBadge, formatDate } from "../AdminComponents";
 
@@ -55,7 +55,7 @@ export default function AdminUsers({
   bulkActionType,
   setBulkActionType,
   handleBulkActionSubmit,
-  languages = []
+  languages = [],
 }) {
   return (
     <motion.div
@@ -67,7 +67,8 @@ export default function AdminUsers({
         <div>
           <h2 className="text-xl font-black text-slate-900">User Directory</h2>
           <p className="text-slate-500 text-xs mt-0.5">
-            Manage active profiles, authentication permissions, block logs, and password adjustments.
+            Manage active profiles, authentication permissions, block logs, and
+            password adjustments.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -89,7 +90,10 @@ export default function AdminUsers({
       </div>
 
       {/* Filters Form */}
-      <form onSubmit={handleFilterSearch} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+      <form
+        onSubmit={handleFilterSearch}
+        className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4"
+      >
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
           <div className="relative">
             <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
@@ -154,7 +158,10 @@ export default function AdminUsers({
             <span className="text-xs text-slate-400">Items per page:</span>
             <select
               value={userLimit}
-              onChange={(e) => { setUserLimit(Number(e.target.value)); setUserPage(1); }}
+              onChange={(e) => {
+                setUserLimit(Number(e.target.value));
+                setUserPage(1);
+              }}
               className="bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-505 px-2 py-0.5"
             >
               <option value={5}>5</option>
@@ -177,24 +184,29 @@ export default function AdminUsers({
       {selectedUserIds.length > 0 && (
         <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex items-center justify-between shadow-sm">
           <span className="text-xs font-bold text-blue-700">
-            {selectedUserIds.length} user{selectedUserIds.length > 1 ? "s" : ""} selected for bulk changes
+            {selectedUserIds.length} user{selectedUserIds.length > 1 ? "s" : ""}{" "}
+            selected for bulk changes
           </span>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setBulkActionType("block")}
-              className="px-3 py-1.5 bg-amber-650 hover:bg-amber-500 text-white font-bold text-[10px] rounded-lg transition-colors cursor-pointer"
+              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-bold text-[10px] rounded-lg transition-colors cursor-pointer"
             >
               Bulk Block
             </button>
             <button
-              onClick={() => handleBulkActionSubmit({ preventDefault: () => {} })}
-              className="px-3 py-1.5 bg-indigo-650 hover:bg-indigo-500 text-white font-bold text-[10px] rounded-lg transition-colors cursor-pointer"
+              onClick={() =>
+                handleBulkActionSubmit({ preventDefault: () => {} })
+              }
+              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] rounded-lg transition-colors cursor-pointer"
             >
               Bulk Unblock
             </button>
             <button
-              onClick={() => handleBulkActionSubmit({ preventDefault: () => {} })}
-              className="px-3 py-1.5 bg-red-650 hover:bg-red-500 text-white font-bold text-[10px] rounded-lg transition-colors cursor-pointer"
+              onClick={() =>
+                handleBulkActionSubmit({ preventDefault: () => {} })
+              }
+              className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white font-bold text-[10px] rounded-lg transition-colors cursor-pointer"
             >
               Bulk Delete
             </button>
@@ -211,7 +223,10 @@ export default function AdminUsers({
                 <th className="p-4 w-12 text-center">
                   <input
                     type="checkbox"
-                    checked={users.length > 0 && selectedUserIds.length === users.length}
+                    checked={
+                      users.length > 0 &&
+                      selectedUserIds.length === users.length
+                    }
                     onChange={handleSelectAll}
                     className="rounded text-blue-650 bg-white border-slate-300 focus:ring-0 cursor-pointer"
                   />
@@ -229,19 +244,27 @@ export default function AdminUsers({
                   <td colSpan="6" className="p-10 text-center">
                     <div className="flex items-center justify-center gap-3 text-blue-600">
                       <div className="w-4 h-4 border-2 border-slate-200 border-t-blue-600 rounded-full animate-spin"></div>
-                      <span className="font-semibold text-xs">Retrieving Directory...</span>
+                      <span className="font-semibold text-xs">
+                        Retrieving Directory...
+                      </span>
                     </div>
                   </td>
                 </tr>
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="p-10 text-center text-slate-400 font-semibold text-xs">
+                  <td
+                    colSpan="6"
+                    className="p-10 text-center text-slate-400 font-semibold text-xs"
+                  >
                     No records found.
                   </td>
                 </tr>
               ) : (
                 users.map((usr) => (
-                  <tr key={usr._id} className="hover:bg-slate-50/50 transition-colors">
+                  <tr
+                    key={usr._id}
+                    className="hover:bg-slate-50/50 transition-colors"
+                  >
                     <td className="p-4 text-center">
                       <input
                         type="checkbox"
@@ -254,21 +277,35 @@ export default function AdminUsers({
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-650 font-bold overflow-hidden">
                           {usr.profileImage ? (
-                            <img src={usr.profileImage} alt="" className="w-full h-full object-cover" />
+                            <img
+                              src={usr.profileImage}
+                              alt=""
+                              className="w-full h-full object-cover"
+                            />
                           ) : (
                             usr.name.charAt(0).toUpperCase()
                           )}
                         </div>
                         <div>
-                          <p className="font-bold text-slate-900 leading-tight">{usr.name}</p>
-                          <p className="text-[10px] text-slate-400 font-medium">@{usr.username}</p>
+                          <p className="font-bold text-slate-900 leading-tight">
+                            {usr.name}
+                          </p>
+                          <p className="text-[10px] text-slate-400 font-medium">
+                            @{usr.username}
+                          </p>
                         </div>
                       </div>
                     </td>
                     <td className="p-4 text-slate-600 font-medium">
                       <div className="space-y-0.5">
-                        <p className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-slate-400" />{usr.email || "No Email"}</p>
-                        <p className="flex items-center gap-1.5"><Globe className="w-3.5 h-3.5 text-slate-400" />{usr.preferredLanguage || "English"}</p>
+                        <p className="flex items-center gap-1.5">
+                          <Mail className="w-3.5 h-3.5 text-slate-400" />
+                          {usr.email || "No Email"}
+                        </p>
+                        <p className="flex items-center gap-1.5">
+                          <Globe className="w-3.5 h-3.5 text-slate-400" />
+                          {usr.preferredLanguage || "English"}
+                        </p>
                       </div>
                     </td>
                     <td className="p-4">
@@ -285,8 +322,14 @@ export default function AdminUsers({
                     </td>
                     <td className="p-4 text-slate-500 font-medium">
                       <div className="space-y-0.5">
-                        <p className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-slate-400" /> Logged: {formatDate(usr.lastLogin)}</p>
-                        <p className="flex items-center gap-1"><Activity className="w-3.5 h-3.5 text-slate-400" /> Seen: {formatDate(usr.lastSeen)}</p>
+                        <p className="flex items-center gap-1 truncate">
+                          <Clock className="w-3.5 h-3.5 text-slate-400" />{" "}
+                          Logged: {formatDate(usr.lastLogin)}
+                        </p>
+                        <p className="flex items-center gap-1 truncate">
+                          <Activity className="w-3.5 h-3.5 text-slate-400" />{" "}
+                          Seen: {formatDate(usr.lastSeen)}
+                        </p>
                       </div>
                     </td>
                     <td className="p-4 text-right">
@@ -315,7 +358,13 @@ export default function AdminUsers({
                             <Key className="w-4 h-4" />
                           </button>
                         </Tooltip>
-                        <Tooltip content={usr.role === "admin" ? "Demote from admin role" : "Promote to admin role"}>
+                        <Tooltip
+                          content={
+                            usr.role === "admin"
+                              ? "Demote from admin role"
+                              : "Promote to admin role"
+                          }
+                        >
                           <button
                             onClick={() => handleRoleChangeToggle(usr)}
                             className="p-1.5 hover:bg-slate-100 hover:text-slate-900 rounded-lg text-slate-400 transition-colors cursor-pointer"
@@ -323,14 +372,26 @@ export default function AdminUsers({
                             <Shield className="w-4 h-4" />
                           </button>
                         </Tooltip>
-                        <Tooltip content={usr.isBlocked ? "Unblock account access" : "Block account access"}>
+                        <Tooltip
+                          content={
+                            usr.isBlocked
+                              ? "Unblock account access"
+                              : "Block account access"
+                          }
+                        >
                           <button
                             onClick={() => handleBlockToggleClick(usr)}
                             className={`p-1.5 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer ${
-                              usr.isBlocked ? "text-rose-600 hover:text-rose-500" : "text-slate-400 hover:text-amber-500"
+                              usr.isBlocked
+                                ? "text-rose-600 hover:text-rose-500"
+                                : "text-slate-400 hover:text-amber-500"
                             }`}
                           >
-                            {usr.isBlocked ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+                            {usr.isBlocked ? (
+                              <Lock className="w-4 h-4" />
+                            ) : (
+                              <Unlock className="w-4 h-4" />
+                            )}
                           </button>
                         </Tooltip>
                         <Tooltip content="Soft delete account">
@@ -354,8 +415,12 @@ export default function AdminUsers({
         {!userLoading && users.length > 0 && (
           <div className="bg-slate-50 p-4 border-t border-slate-200 flex items-center justify-between">
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-              Page <span className="text-slate-700 font-extrabold">{userPage}</span> of{" "}
-              <span className="text-slate-700 font-extrabold">{userTotalPages}</span>
+              Page{" "}
+              <span className="text-slate-700 font-extrabold">{userPage}</span>{" "}
+              of{" "}
+              <span className="text-slate-700 font-extrabold">
+                {userTotalPages}
+              </span>
             </p>
             <div className="flex items-center gap-1">
               <button
@@ -366,7 +431,9 @@ export default function AdminUsers({
                 <ChevronLeft className="w-3.5 h-3.5" />
               </button>
               <button
-                onClick={() => setUserPage((p) => Math.min(userTotalPages, p + 1))}
+                onClick={() =>
+                  setUserPage((p) => Math.min(userTotalPages, p + 1))
+                }
                 disabled={userPage === userTotalPages}
                 className="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-505 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
               >

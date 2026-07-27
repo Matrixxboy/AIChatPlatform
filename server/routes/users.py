@@ -76,6 +76,11 @@ async def update_profile(data: dict, current_user_id: str = Depends(get_current_
     )
     return {"message": "Profile updated successfully"}
 
+@router.get("/vapid-public-key")
+async def get_vapid_public_key():
+    from config import settings
+    return {"publicKey": settings.VAPID_PUBLIC_KEY}
+
 @router.get("/{user_id}")
 async def get_user_profile(user_id: str, current_user_id: str = Depends(get_current_user_id)):
     user = await users_collection.find_one({"_id": ObjectId(user_id)})
@@ -90,3 +95,31 @@ async def get_user_profile(user_id: str, current_user_id: str = Depends(get_curr
         "profileImage": user.get("profileImage", ""),
         "preferredLanguage": user.get("preferredLanguage", "English")
     }
+
+
+@router.post("/push-subscription")
+async def add_push_subscription(subscription: dict, current_user_id: str = Depends(get_current_user_id)):
+    # Add push subscription to user document if it doesn't already exist
+    # endpoint is unique inside the subscription object, so we filter by it
+    endpoint = subscription.get("endpoint")
+    if not endpoint:
+        raise HTTPException(status_code=400, detail="Invalid subscription data")
+        
+    await users_collection.update_one(
+        {"_id": ObjectId(current_user_id)},
+        {"$addToSet": {"pushSubscriptions": subscription}}
+    )
+    return {"message": "Push subscription added successfully"}
+
+@router.post("/push-subscription/unsubscribe")
+async def remove_push_subscription(subscription: dict, current_user_id: str = Depends(get_current_user_id)):
+    endpoint = subscription.get("endpoint")
+    if not endpoint:
+        raise HTTPException(status_code=400, detail="Invalid subscription data")
+        
+    await users_collection.update_one(
+        {"_id": ObjectId(current_user_id)},
+        {"$pull": {"pushSubscriptions": {"endpoint": endpoint}}}
+    )
+    return {"message": "Push subscription removed successfully"}
+

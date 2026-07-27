@@ -1,6 +1,14 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { Clock, User, Mail, MessageSquare, Eye, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  Clock,
+  User,
+  Mail,
+  MessageSquare,
+  Eye,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { Tooltip, formatDate } from "../AdminComponents";
 
 export default function AdminContacts({
@@ -10,7 +18,7 @@ export default function AdminContacts({
   setContactPage,
   contactTotalPages,
   contactTotalCount,
-  setSelectedContact
+  setSelectedContact,
 }) {
   return (
     <motion.div
@@ -54,25 +62,35 @@ export default function AdminContacts({
                   <td colSpan="5" className="p-10 text-center">
                     <div className="flex items-center justify-center gap-3 text-blue-600">
                       <div className="w-4 h-4 border-2 border-slate-200 border-t-blue-600 rounded-full animate-spin"></div>
-                      <span className="font-semibold text-xs">Retrieving feedback...</span>
+                      <span className="font-semibold text-xs">
+                        Retrieving feedback...
+                      </span>
                     </div>
                   </td>
                 </tr>
               ) : contacts.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="p-10 text-center text-slate-400 font-semibold text-xs">
+                  <td
+                    colSpan="5"
+                    className="p-10 text-center text-slate-400 font-semibold text-xs"
+                  >
                     Inbox empty.
                   </td>
                 </tr>
               ) : (
                 contacts.map((contact, index) => (
-                  <tr key={contact._id} className="hover:bg-slate-50/50 transition-colors group">
+                  <tr
+                    key={contact._id}
+                    className="hover:bg-slate-50/50 transition-colors group"
+                  >
                     <td className="p-4 whitespace-nowrap text-slate-400 font-bold">
                       {(contactPage - 1) * 10 + index + 1}
                     </td>
-                    <td className="p-4 whitespace-nowrap text-slate-500 text-xs flex items-center gap-2">
-                      <Clock className="w-3.5 h-3.5" />
-                      {formatDate(contact.createdAt)}
+                    <td className="p-4 whitespace-nowrap text-slate-500 font-medium">
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4" />
+                        {formatDate(contact.createdAt)}
+                      </div>
                     </td>
                     <td className="p-4 whitespace-nowrap font-bold text-slate-800">
                       <div className="flex items-center gap-2">
@@ -83,7 +101,10 @@ export default function AdminContacts({
                     <td className="p-4 whitespace-nowrap text-blue-600 font-medium">
                       <div className="flex items-center gap-2">
                         <Mail className="w-4 h-4 text-slate-400" />
-                        <a href={`mailto:${contact.email}`} className="hover:underline">
+                        <a
+                          href={`mailto:${contact.email}`}
+                          className="hover:underline"
+                        >
                           {contact.email}
                         </a>
                       </div>
@@ -115,8 +136,14 @@ export default function AdminContacts({
         {!contactLoading && contacts.length > 0 && (
           <div className="bg-slate-50 p-4 border-t border-slate-200 flex items-center justify-between">
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-              Page <span className="text-slate-700 font-extrabold">{contactPage}</span> of{" "}
-              <span className="text-slate-700 font-extrabold">{contactTotalPages}</span>
+              Page{" "}
+              <span className="text-slate-700 font-extrabold">
+                {contactPage}
+              </span>{" "}
+              of{" "}
+              <span className="text-slate-700 font-extrabold">
+                {contactTotalPages}
+              </span>
             </p>
             <div className="flex items-center gap-2">
               <button
@@ -127,7 +154,9 @@ export default function AdminContacts({
                 <ChevronLeft className="w-3.5 h-3.5" />
               </button>
               <button
-                onClick={() => setContactPage((p) => Math.min(contactTotalPages, p + 1))}
+                onClick={() =>
+                  setContactPage((p) => Math.min(contactTotalPages, p + 1))
+                }
                 disabled={contactPage === contactTotalPages}
                 className="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-505 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
               >

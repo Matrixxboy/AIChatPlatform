@@ -14,5 +14,11 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY")
+    VAPID_PUBLIC_KEY: str = os.getenv("VAPID_PUBLIC_KEY", "")
+    VAPID_PRIVATE_KEY: str = os.getenv("VAPID_PRIVATE_KEY", "")
+    VAPID_ADMIN_EMAIL: str = os.getenv("VAPID_ADMIN_EMAIL", "mailto:admin@biz-insights.com")
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "https://biz-insights.com/ai-chat-platform")
+
+
 
 settings = Settings()

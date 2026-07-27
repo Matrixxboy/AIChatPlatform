@@ -93,6 +93,25 @@ export default function AdminOverview({
         </div>
       </div>
 
+      {/* AI Token Metrics & Costing */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+        <div className="bg-emerald-50/40 p-5 rounded-2xl border border-emerald-100 shadow-sm relative overflow-hidden group">
+          <Globe className="w-5 h-5 text-emerald-600 mb-3" />
+          <p className="text-emerald-700 text-[10px] font-bold uppercase tracking-wider">AI Input Tokens</p>
+          <p className="text-2xl font-black text-emerald-950 mt-1">{(stats.totalInputTokens || 0).toLocaleString()}</p>
+        </div>
+        <div className="bg-emerald-50/40 p-5 rounded-2xl border border-emerald-100 shadow-sm relative overflow-hidden group">
+          <Globe className="w-5 h-5 text-emerald-600 mb-3" />
+          <p className="text-emerald-700 text-[10px] font-bold uppercase tracking-wider">AI Output Tokens</p>
+          <p className="text-2xl font-black text-emerald-950 mt-1">{(stats.totalOutputTokens || 0).toLocaleString()}</p>
+        </div>
+        <div className="bg-rose-50/40 p-5 rounded-2xl border border-rose-100 shadow-sm col-span-2 relative overflow-hidden group">
+          <Activity className="w-5 h-5 text-rose-600 mb-3" />
+          <p className="text-rose-700 text-[10px] font-bold uppercase tracking-wider">Total Estimated AI Billing (INR)</p>
+          <p className="text-2xl font-black text-rose-955 mt-1">₹{(stats.totalCostINR || 0).toFixed(4)}</p>
+        </div>
+      </div>
+
       {/* Visual Analytics section merged directly into the dashboard */}
       <div className="border-t border-slate-200 pt-6">
         <h3 className="text-sm font-bold text-slate-800 mb-5 uppercase tracking-widest">

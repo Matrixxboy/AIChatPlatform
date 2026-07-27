@@ -97,6 +97,31 @@ function ChatRoom({ user, onUserUpdate, socket }) {
     );
   };
 
+  // Safe localStorage writer — evicts old message caches on QuotaExceededError
+  const safeLocalStorageSet = (key, value) => {
+    try {
+      localStorage.setItem(key, value);
+    } catch (e) {
+      if (e instanceof DOMException && (e.name === "QuotaExceededError" || e.name === "NS_ERROR_DOM_QUOTA_REACHED")) {
+        // Evict all cached message keys to free space
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith("cached_messages_") && k !== key) {
+            keysToRemove.push(k);
+          }
+        }
+        keysToRemove.forEach((k) => localStorage.removeItem(k));
+        // Retry once after eviction
+        try {
+          localStorage.setItem(key, value);
+        } catch (_) {
+          // Still too large — skip cache silently (in-memory state still works)
+        }
+      }
+    }
+  };
+
   const [isRecording, setIsRecording] = useState(false);
   useEffect(() => {
     localStorage.setItem("pref_myLang", myLang);
@@ -293,7 +318,7 @@ function ChatRoom({ user, onUserUpdate, socket }) {
             const updated = prev.map((m) =>
               m._id === exists._id ? messageWithLang : m,
             );
-            localStorage.setItem(
+            safeLocalStorageSet(
               `cached_messages_${sessionId}`,
               JSON.stringify(updated),
             );
@@ -313,7 +338,7 @@ function ChatRoom({ user, onUserUpdate, socket }) {
         }
 
         const updated = [...prev, messageWithLang];
-        localStorage.setItem(
+        safeLocalStorageSet(
           `cached_messages_${sessionId}`,
           JSON.stringify(updated),
         );
@@ -326,7 +351,20 @@ function ChatRoom({ user, onUserUpdate, socket }) {
         const updated = prev.map((m) =>
           m._id === data.messageId ? { ...m, status: data.status } : m,
         );
-        localStorage.setItem(
+        safeLocalStorageSet(
+          `cached_messages_${sessionId}`,
+          JSON.stringify(updated),
+        );
+        return updated;
+      });
+    };
+
+    const handleSessionMessagesSeen = (data) => {
+      setMessages((prev) => {
+        const updated = prev.map((m) =>
+          m.senderId === user.id ? { ...m, status: "seen" } : m,
+        );
+        safeLocalStorageSet(
           `cached_messages_${sessionId}`,
           JSON.stringify(updated),
         );
@@ -345,6 +383,7 @@ function ChatRoom({ user, onUserUpdate, socket }) {
     socket.on("receive_message", handleReceiveMessage);
     socket.on("user_typing", handleUserTyping);
     socket.on("message_status_update", handleStatusUpdate);
+    socket.on("session_messages_seen", handleSessionMessagesSeen);
 
     return () => {
       socket.off("connect", onConnect);
@@ -352,6 +391,7 @@ function ChatRoom({ user, onUserUpdate, socket }) {
       socket.off("receive_message", handleReceiveMessage);
       socket.off("user_typing", handleUserTyping);
       socket.off("message_status_update", handleStatusUpdate);
+      socket.off("session_messages_seen", handleSessionMessagesSeen);
     };
   }, [socket, sessionId, user.id, myLang, domain]);
 
@@ -372,20 +412,23 @@ function ChatRoom({ user, onUserUpdate, socket }) {
 
   const fetchMessages = async () => {
     setIsFetchingMessages(true);
+    let messagesData = null;
     try {
       const res = await api.get(`/api/sessions/${sessionId}/messages`);
-
-      const messagesData = res.data;
+      messagesData = res.data;
       setMessages(messagesData);
-      localStorage.setItem(
-        `cached_messages_${sessionId}`,
-        JSON.stringify(messagesData),
-      );
     } catch (err) {
-      console.error("Failed to fetch messages");
+      console.error("Failed to fetch messages:", err);
       showToast("Could not load message history", "error");
     } finally {
       setIsFetchingMessages(false);
+    }
+    // Write to cache separately — never let a storage error trigger the error toast
+    if (messagesData) {
+      safeLocalStorageSet(
+        `cached_messages_${sessionId}`,
+        JSON.stringify(messagesData),
+      );
     }
   };
 
@@ -961,7 +1004,8 @@ function ChatRoom({ user, onUserUpdate, socket }) {
                         Translate Chat History
                       </button>
                       <div className="h-[1px] bg-slate-100 my-1" />
-                      {(!session?.isGroup || session?.admins?.includes(user.id)) && (
+                      {(!session?.isGroup ||
+                        session?.admins?.includes(user.id)) && (
                         <button
                           onClick={() => {
                             setIsHeaderMenuOpen(false);
@@ -970,7 +1014,9 @@ function ChatRoom({ user, onUserUpdate, socket }) {
                           className="w-full px-4 py-3 text-left text-sm font-medium text-red-600 hover:bg-red-50 flex items-center gap-3 transition-colors cursor-pointer"
                         >
                           <Trash2 className="w-4 h-4" />
-                          {session?.isGroup ? "Delete Group Permanently" : "Delete Chat Permanently"}
+                          {session?.isGroup
+                            ? "Delete Group Permanently"
+                            : "Delete Chat Permanently"}
                         </button>
                       )}
                     </motion.div>
@@ -1435,11 +1481,19 @@ const MessageBubble = ({
       className={`flex ${isOwn ? "justify-end" : "justify-start"} items-end gap-2 mb-1.5 relative group w-full`}
     >
       {!isOwn && isGroup && (
-        <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-[10px] uppercase shrink-0 select-none shadow-sm border ${getAvatarColor(msg.senderName)} mb-[2px] overflow-hidden`}>
+        <div
+          className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-[10px] uppercase shrink-0 select-none shadow-sm border ${getAvatarColor(msg.senderName)} mb-[2px] overflow-hidden`}
+        >
           {msg.senderProfileImage ? (
-            <img src={msg.senderProfileImage} alt="Profile" className="w-full h-full object-cover" />
+            <img
+              src={msg.senderProfileImage}
+              alt="Profile"
+              className="w-full h-full object-cover"
+            />
+          ) : msg.senderName ? (
+            msg.senderName[0].toUpperCase()
           ) : (
-            msg.senderName ? msg.senderName[0].toUpperCase() : "M"
+            "M"
           )}
         </div>
       )}
