@@ -118,7 +118,30 @@ function App() {
     setSocket(newSocket);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    // Unsubscribe this browser session's push subscription from the backend
+    if ("serviceWorker" in navigator) {
+      try {
+        const registration = await navigator.serviceWorker.getRegistration();
+        if (registration) {
+          const subscription = await registration.pushManager.getSubscription();
+          if (subscription) {
+            await api.post(
+              "/api/users/push-subscription/unsubscribe",
+              subscription,
+            );
+            await subscription.unsubscribe();
+          } else {
+            console.log("No active push subscription found on logout.");
+          }
+        } else {
+          console.log("No service worker registration found on logout.");
+        }
+      } catch (err) {
+        console.error("Clean up subscription error during logout:", err);
+      }
+    }
+
     if (socket) socket.close();
     setSocket(null);
     setUser(null);
@@ -213,7 +236,11 @@ function App() {
             path="/admin/dashboard"
             element={
               user && user.role === "admin" ? (
-                <AdminDashboard user={user} onLogout={handleLogout} tab="overview" />
+                <AdminDashboard
+                  user={user}
+                  onLogout={handleLogout}
+                  tab="overview"
+                />
               ) : (
                 <Navigate to="/login" />
               )
@@ -223,7 +250,11 @@ function App() {
             path="/admin/users"
             element={
               user && user.role === "admin" ? (
-                <AdminDashboard user={user} onLogout={handleLogout} tab="users" />
+                <AdminDashboard
+                  user={user}
+                  onLogout={handleLogout}
+                  tab="users"
+                />
               ) : (
                 <Navigate to="/login" />
               )
@@ -233,7 +264,11 @@ function App() {
             path="/admin/contacts"
             element={
               user && user.role === "admin" ? (
-                <AdminDashboard user={user} onLogout={handleLogout} tab="contacts" />
+                <AdminDashboard
+                  user={user}
+                  onLogout={handleLogout}
+                  tab="contacts"
+                />
               ) : (
                 <Navigate to="/login" />
               )

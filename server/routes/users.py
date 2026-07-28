@@ -99,11 +99,15 @@ async def get_user_profile(user_id: str, current_user_id: str = Depends(get_curr
 
 @router.post("/push-subscription")
 async def add_push_subscription(subscription: dict, current_user_id: str = Depends(get_current_user_id)):
-    # Add push subscription to user document if it doesn't already exist
-    # endpoint is unique inside the subscription object, so we filter by it
     endpoint = subscription.get("endpoint")
     if not endpoint:
         raise HTTPException(status_code=400, detail="Invalid subscription data")
+        
+    # Remove this endpoint from any other user to prevent cross-account push deliveries
+    await users_collection.update_many(
+        {"_id": {"$ne": ObjectId(current_user_id)}},
+        {"$pull": {"pushSubscriptions": {"endpoint": endpoint}}}
+    )
         
     await users_collection.update_one(
         {"_id": ObjectId(current_user_id)},

@@ -106,10 +106,13 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
   // --- Push Notification Helpers ---
   function urlBase64ToUint8Array(base64String) {
     const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-    const base64 = (base64String + padding).replace(/\-/g, "+").replace(/_/g, "/");
+    const base64 = (base64String + padding)
+      .replace(/\-/g, "+")
+      .replace(/_/g, "/");
     const rawData = window.atob(base64);
     const outputArray = new Uint8Array(rawData.length);
-    for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+    for (let i = 0; i < rawData.length; ++i)
+      outputArray[i] = rawData.charCodeAt(i);
     return outputArray;
   }
 
@@ -117,7 +120,13 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
     setIsTogglingNotif(true);
     try {
-      const registration = await navigator.serviceWorker.ready;
+      const registration = await navigator.serviceWorker.getRegistration();
+      if (!registration) {
+        console.error(
+          "No service worker registration found when enabling push.",
+        );
+        return;
+      }
       const permission = await Notification.requestPermission();
       if (permission !== "granted") {
         setNotifStatus("denied");
@@ -136,7 +145,6 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
       }
       await api.post("/api/users/push-subscription", subscription);
       setNotifStatus("granted");
-      console.log("Push notifications enabled.");
     } catch (err) {
       console.error("Error enabling push notifications:", err);
     } finally {
@@ -148,14 +156,18 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
     if (!("serviceWorker" in navigator)) return;
     setIsTogglingNotif(true);
     try {
-      const registration = await navigator.serviceWorker.ready;
-      const subscription = await registration.pushManager.getSubscription();
-      if (subscription) {
-        await api.post("/api/users/push-subscription/unsubscribe", subscription);
-        await subscription.unsubscribe();
+      const registration = await navigator.serviceWorker.getRegistration();
+      if (registration) {
+        const subscription = await registration.pushManager.getSubscription();
+        if (subscription) {
+          await api.post(
+            "/api/users/push-subscription/unsubscribe",
+            subscription,
+          );
+          await subscription.unsubscribe();
+        }
       }
       setNotifStatus("default");
-      console.log("Push notifications disabled.");
     } catch (err) {
       console.error("Error disabling push notifications:", err);
     } finally {
@@ -395,15 +407,21 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
                 {notifStatus === "unsupported" ? (
                   <div className="flex items-center gap-3 text-slate-400">
                     <BellOff className="w-5 h-5" />
-                    <p className="text-sm font-medium">Not supported in this browser</p>
+                    <p className="text-sm font-medium">
+                      Not supported in this browser
+                    </p>
                   </div>
                 ) : notifStatus === "denied" ? (
                   <div className="flex items-start gap-3">
                     <BellOff className="w-5 h-5 text-red-400 mt-0.5 shrink-0" />
                     <div>
-                      <p className="text-sm font-semibold text-slate-800">Notifications blocked</p>
+                      <p className="text-sm font-semibold text-slate-800">
+                        Notifications blocked
+                      </p>
                       <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
-                        You blocked notifications in your browser. To enable them, click the lock icon in your browser's address bar and allow notifications.
+                        You blocked notifications in your browser. To enable
+                        them, click the lock icon in your browser's address bar
+                        and allow notifications.
                       </p>
                     </div>
                   </div>
@@ -417,7 +435,9 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
                       )}
                       <div>
                         <p className="text-sm font-semibold text-slate-800">
-                          {notifStatus === "granted" ? "Notifications On" : "Notifications Off"}
+                          {notifStatus === "granted"
+                            ? "Notifications On"
+                            : "Notifications Off"}
                         </p>
                         <p className="text-[11px] text-slate-400 mt-0.5">
                           {notifStatus === "granted"
@@ -428,16 +448,28 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
                     </div>
                     {/* Toggle Switch */}
                     <button
-                      onClick={notifStatus === "granted" ? unsubscribeFromPush : subscribeToPush}
+                      onClick={
+                        notifStatus === "granted"
+                          ? unsubscribeFromPush
+                          : subscribeToPush
+                      }
                       disabled={isTogglingNotif}
                       className={`relative w-12 h-6 rounded-full transition-all duration-300 focus:outline-none ${
-                        notifStatus === "granted" ? "bg-emerald-500" : "bg-slate-300"
+                        notifStatus === "granted"
+                          ? "bg-emerald-500"
+                          : "bg-slate-300"
                       } ${isTogglingNotif ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
-                      title={notifStatus === "granted" ? "Turn off notifications" : "Turn on notifications"}
+                      title={
+                        notifStatus === "granted"
+                          ? "Turn off notifications"
+                          : "Turn on notifications"
+                      }
                     >
                       <span
                         className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-300 ${
-                          notifStatus === "granted" ? "translate-x-6" : "translate-x-0"
+                          notifStatus === "granted"
+                            ? "translate-x-6"
+                            : "translate-x-0"
                         }`}
                       />
                     </button>
@@ -650,7 +682,9 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
                   <div className="flex-1 min-w-0 border-b border-slate-100 py-2 group-last:border-0 relative">
                     <div className="flex justify-between items-start mb-0.5">
                       <div className="flex flex-col min-w-0">
-                        <p className={`text-[15px] truncate ${s.unreadCount > 0 ? "text-slate-950 font-black" : "text-slate-800 font-bold"}`}>
+                        <p
+                          className={`text-[15px] truncate ${s.unreadCount > 0 ? "text-slate-950 font-black" : "text-slate-800 font-bold"}`}
+                        >
                           {s.name}
                         </p>
                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">
@@ -659,15 +693,19 @@ function Dashboard({ user, onLogout, onUserUpdate, socket }) {
                             : `@${s.otherUser?.username || "user"}`}
                         </p>
                       </div>
-                      <span className={`text-[11px] shrink-0 pt-1 ${s.unreadCount > 0 ? "text-emerald-500 font-black" : "text-slate-400 font-medium"}`}>
+                      <span
+                        className={`text-[11px] shrink-0 pt-1 ${s.unreadCount > 0 ? "text-emerald-500 font-black" : "text-slate-400 font-medium"}`}
+                      >
                         {formatLastMessageTime(s.lastMessageTime)}
                       </span>
                     </div>
                     <div className="flex justify-between items-center gap-2">
-                      <p className={`text-sm truncate leading-tight pr-4 ${s.unreadCount > 0 ? "text-slate-900 font-bold" : "text-slate-500"}`}>
+                      <p
+                        className={`text-sm truncate leading-tight pr-4 ${s.unreadCount > 0 ? "text-slate-900 font-bold" : "text-slate-500"}`}
+                      >
                         {s.lastMessage || "Click to open chat..."}
                       </p>
-                      
+
                       <div className="flex items-center gap-2 shrink-0">
                         {s.unreadCount > 0 && (
                           <span className="min-w-[18px] h-[18px] bg-emerald-500 text-white rounded-full flex items-center justify-center text-[9px] font-black px-1.5 shadow-sm">
